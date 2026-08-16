@@ -142,7 +142,6 @@ export function AliasSelector(props: AliasSelectorProps) {
     <Menu
       className="dma-selector"
       open={open}
-      portal
       align="end"
       side="top"
       items={items}
