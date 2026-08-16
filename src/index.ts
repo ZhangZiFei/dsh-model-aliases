@@ -26,12 +26,14 @@ export const MODEL_ALIASES_SETTINGS_SCHEMA: z<ModelAliasSettings> = z.object({
 export const inject = ['settings']
 
 export function apply(ctx: Context): void {
+  const options = {
+    applies: 'live',
+    expose: 'configuration-client',
+    validate: validateModelAliasSettings,
+  } as const
   ctx.settings.register(
     MODEL_ALIASES_SETTINGS_NAMESPACE,
     MODEL_ALIASES_SETTINGS_SCHEMA,
-    {
-      applies: 'live',
-      validate: validateModelAliasSettings,
-    },
+    options,
   )
 }

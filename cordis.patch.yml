@@ -1,0 +1,4 @@
+# dsh-model-aliases bundle patch：挂载 Host，并由 dsh.client 清单装载 Web Client。
+- insert:
+    - id: model-aliases
+      name: dsh-model-aliases
