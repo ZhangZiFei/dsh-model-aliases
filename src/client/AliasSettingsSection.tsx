@@ -13,6 +13,7 @@ import type { SettingsScope } from '@deepseek-ai/dsh-client-runtime/client'
 import {
   Button,
   IconChevronDownOutline14,
+  IconChevronUpOutline14,
   Menu,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type {
@@ -196,6 +197,19 @@ export function AliasSettingsSection(props: AliasSettingsSectionProps) {
     ])
   }
 
+  const moveAlias = (index: number, offset: -1 | 1) => {
+    const target = index + offset
+    if (target < 0 || target >= draft.length) return
+    setSaveError(null)
+    setDraft((current) => {
+      const next = [...current]
+      const swapped = next[index]!
+      next[index] = next[target]!
+      next[target] = swapped
+      return next
+    })
+  }
+
   const save = async () => {
     if (validationError !== null) return
     setSaving(true)
@@ -354,17 +368,39 @@ export function AliasSettingsSection(props: AliasSettingsSectionProps) {
                 />
               </div>
 
-              <Button
-                type="button"
-                variant="outline"
-                className="dma-button--danger"
-                onClick={() => {
-                  setSaveError(null)
-                  setDraft((current) => current.filter((_, at) => at !== index))
-                }}
-              >
-                {t('settings.remove')}
-              </Button>
+              <div className="dma-alias-card__actions">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  aria-label={t('settings.moveUp')}
+                  disabled={index === 0}
+                  onClick={() => moveAlias(index, -1)}
+                >
+                  <IconChevronUpOutline14 />
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  aria-label={t('settings.moveDown')}
+                  disabled={index === draft.length - 1}
+                  onClick={() => moveAlias(index, 1)}
+                >
+                  <IconChevronDownOutline14 />
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="dma-button--danger"
+                  onClick={() => {
+                    setSaveError(null)
+                    setDraft((current) => current.filter((_, at) => at !== index))
+                  }}
+                >
+                  {t('settings.remove')}
+                </Button>
+              </div>
             </article>
           )
         })}

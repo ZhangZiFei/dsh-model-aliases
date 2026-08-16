@@ -35,7 +35,7 @@ export const STYLE_TEXT = `
 .dma-select__chevron{flex:none;color:var(--dsw-alias-label-caption)}
 .dma-button--danger{color:var(--dsw-alias-state-error-primary);border-color:var(--dsw-alias-state-error-primary)}
 .dma-button--danger:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover-danger)}
-.dma-alias-card .dma-button--danger{justify-self:start}
+.dma-alias-card__actions{display:flex;align-items:center;gap:8px;justify-self:start}
 .dma-settings__actions{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-top:4px}
 .dma-settings__actions-group{display:flex;align-items:center;gap:10px}
 .dma-settings__status{color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:18px}

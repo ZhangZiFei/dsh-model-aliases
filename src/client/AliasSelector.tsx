@@ -71,6 +71,12 @@ export function AliasSelector(props: AliasSelectorProps) {
     [configuredAliases, directoryState.current, directoryState.groups],
   )
 
+  // 菜单按设置顺序倒序展示：设置页最顶部的别名出现在菜单底部。
+  const menuAliases = useMemo(
+    () => [...configuredAliases].reverse(),
+    [configuredAliases],
+  )
+
   useEffect(() => {
     if (available) loadDirectory()
   }, [available, loadDirectory])
@@ -100,7 +106,7 @@ export function AliasSelector(props: AliasSelectorProps) {
   const error = selectError ?? directoryState.error
   const selectedIndex = currentAlias === undefined
     ? -1
-    : configuredAliases.findIndex((alias) => alias.name === currentAlias.name)
+    : menuAliases.findIndex((alias) => alias.name === currentAlias.name)
   const items: MenuEntry[] = [
     ...(error === null ? [] : [{
       id: 'status:error',
@@ -117,7 +123,7 @@ export function AliasSelector(props: AliasSelectorProps) {
       label: <span className="dma-selector__message">{t('selector.empty')}</span>,
       disabled: true,
     }] : []),
-    ...configuredAliases.map((alias, index) => {
+    ...menuAliases.map((alias, index) => {
       const availability = aliasAvailability(alias, directoryState.groups)
       const reason = availability.reason === undefined
         ? undefined
@@ -149,7 +155,7 @@ export function AliasSelector(props: AliasSelectorProps) {
       onClose={() => setOpen(false)}
       onSelect={(id) => {
         if (!id.startsWith('alias:')) return
-        const alias = configuredAliases[Number(id.slice('alias:'.length))]
+        const alias = menuAliases[Number(id.slice('alias:'.length))]
         if (alias !== undefined) void choose(alias)
       }}
       anchor={(
