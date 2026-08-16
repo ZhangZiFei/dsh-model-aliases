@@ -10,6 +10,11 @@ import type {
   SessionModels,
 } from '@deepseek-ai/dsh-api-remotes/client'
 import type { SettingsScope } from '@deepseek-ai/dsh-client-runtime/client'
+import {
+  Button,
+  IconChevronDownOutline14,
+  Menu,
+} from '@deepseek-ai/dsh-client-ui-primitives'
 import type {
   InjectFace,
   PropsLocale,
@@ -36,6 +41,65 @@ interface CatalogState {
   status: 'idle' | 'loading' | 'ready' | 'error'
   groups: readonly ModelProviderGroup[]
   error: string | null
+}
+
+interface SelectOption {
+  value: string
+  label: string
+}
+
+function SettingsSelect({
+  value,
+  options,
+  disabled = false,
+  ariaLabel,
+  onChange,
+}: {
+  value: string
+  options: readonly SelectOption[]
+  disabled?: boolean
+  ariaLabel: string
+  onChange: (value: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const selected = options.find((option) => option.value === value)
+
+  useEffect(() => {
+    if (disabled) setOpen(false)
+  }, [disabled])
+
+  return (
+    <Menu
+      className="dma-select"
+      open={open}
+      portal
+      align="start"
+      items={options.map((option) => ({
+        id: option.value,
+        label: option.label,
+      }))}
+      selectedId={value}
+      onClose={() => setOpen(false)}
+      onSelect={(next) => {
+        setOpen(false)
+        onChange(next)
+      }}
+      anchor={(
+        <button
+          type="button"
+          className="dma-select__trigger"
+          aria-label={ariaLabel}
+          aria-haspopup="menu"
+          aria-expanded={open}
+          disabled={disabled || options.length === 0}
+          onClick={() => setOpen((current) => !current)}
+        >
+          <span className="dma-select__value">{selected?.label ?? value}</span>
+          <IconChevronDownOutline14 className="dma-select__chevron" />
+        </button>
+      )}
+    />
+  )
 }
 
 function messageOf(error: unknown): string {
@@ -195,69 +259,90 @@ export function AliasSettingsSection(props: AliasSettingsSectionProps) {
                 />
               </label>
 
-              <label className="dma-field">
+              <div className="dma-field">
                 <span>{t('settings.provider')}</span>
                 {catalog.groups.length === 0 ? (
                   <input
                     value={alias.provider}
+                    aria-label={t('settings.provider')}
                     placeholder={t('settings.manualHint')}
                     onChange={(event) => replaceAt(index, { ...alias, provider: event.target.value })}
                   />
                 ) : (
-                  <select
+                  <SettingsSelect
                     value={alias.provider}
-                    onChange={(event) => {
-                      const group = catalog.groups.find((entry) => entry.id === event.target.value)
+                    ariaLabel={t('settings.provider')}
+                    options={[
+                      ...(!providerKnown ? [{
+                        value: alias.provider,
+                        label: `${alias.provider} · ${t('settings.unavailable')}`,
+                      }] : []),
+                      ...catalog.groups.map((group) => ({
+                        value: group.id,
+                        label: group.name,
+                      })),
+                    ]}
+                    onChange={(provider) => {
+                      const group = catalog.groups.find((entry) => entry.id === provider)
                       replaceAt(index, {
                         name: alias.name,
-                        provider: event.target.value,
+                        provider,
                         model: group?.models[0]?.id ?? '',
                       })
                     }}
-                  >
-                    {!providerKnown && (
-                      <option value={alias.provider}>{alias.provider} · {t('settings.unavailable')}</option>
-                    )}
-                    {catalog.groups.map((group) => (
-                      <option value={group.id} key={group.id}>{group.name}</option>
-                    ))}
-                  </select>
+                  />
                 )}
-              </label>
+              </div>
 
-              <label className="dma-field">
+              <div className="dma-field">
                 <span>{t('settings.model')}</span>
                 {selectedGroup === undefined ? (
                   <input
                     value={alias.model}
+                    aria-label={t('settings.model')}
                     placeholder={t('settings.manualHint')}
                     onChange={(event) => replaceAt(index, { ...alias, model: event.target.value })}
                   />
                 ) : (
-                  <select
+                  <SettingsSelect
                     value={alias.model}
-                    onChange={(event) => replaceAt(index, {
+                    ariaLabel={t('settings.model')}
+                    options={[
+                      ...(!modelKnown ? [{
+                        value: alias.model,
+                        label: `${alias.model} · ${t('settings.unavailable')}`,
+                      }] : []),
+                      ...selectedGroup.models.map((model) => ({
+                        value: model.id,
+                        label: model.name,
+                      })),
+                    ]}
+                    onChange={(model) => replaceAt(index, {
                       name: alias.name,
                       provider: alias.provider,
-                      model: event.target.value,
+                      model,
                     })}
-                  >
-                    {!modelKnown && (
-                      <option value={alias.model}>{alias.model} · {t('settings.unavailable')}</option>
-                    )}
-                    {selectedGroup.models.map((model) => (
-                      <option value={model.id} key={model.id}>{model.name}</option>
-                    ))}
-                  </select>
+                  />
                 )}
-              </label>
+              </div>
 
-              <label className="dma-field">
+              <div className="dma-field">
                 <span>{t('settings.effort')}</span>
-                <select
+                <SettingsSelect
                   value={alias.reasoningEffort ?? ''}
-                  onChange={(event) => {
-                    const value = event.target.value
+                  ariaLabel={t('settings.effort')}
+                  options={[
+                    { value: '', label: t('settings.providerDefault') },
+                    ...(!effortKnown && alias.reasoningEffort !== undefined ? [{
+                      value: alias.reasoningEffort,
+                      label: `${alias.reasoningEffort} · ${t('settings.unavailable')}`,
+                    }] : []),
+                    ...(selectedModel?.reasoning?.efforts.map((effort) => ({
+                      value: effort.id,
+                      label: effort.name,
+                    })) ?? []),
+                  ]}
+                  onChange={(value) => {
                     const next: ModelAlias = {
                       name: alias.name,
                       provider: alias.provider,
@@ -266,50 +351,41 @@ export function AliasSettingsSection(props: AliasSettingsSectionProps) {
                     if (value.length > 0) next.reasoningEffort = value
                     replaceAt(index, next)
                   }}
-                >
-                  <option value="">{t('settings.providerDefault')}</option>
-                  {!effortKnown && alias.reasoningEffort !== undefined && (
-                    <option value={alias.reasoningEffort}>
-                      {alias.reasoningEffort} · {t('settings.unavailable')}
-                    </option>
-                  )}
-                  {selectedModel?.reasoning?.efforts.map((effort) => (
-                    <option value={effort.id} key={effort.id}>{effort.name}</option>
-                  ))}
-                </select>
-              </label>
+                />
+              </div>
 
-              <button
+              <Button
                 type="button"
-                className="dma-button dma-button--danger"
+                variant="outline"
+                className="dma-button--danger"
                 onClick={() => {
                   setSaveError(null)
                   setDraft((current) => current.filter((_, at) => at !== index))
                 }}
               >
                 {t('settings.remove')}
-              </button>
+              </Button>
             </article>
           )
         })}
       </div>
 
       <footer className="dma-settings__actions">
-        <button type="button" className="dma-button" onClick={addAlias}>
+        <Button type="button" variant="outline" onClick={addAlias}>
           {t('settings.add')}
-        </button>
+        </Button>
         <div className="dma-settings__actions-group">
           {savedRevision === state.revision && !dirty && (
             <span className="dma-settings__status">{t('settings.saved')}</span>
           )}
-          <button
+          <Button
             type="button"
-            className="dma-button dma-button--primary"
+            variant="primary"
             disabled={!dirty || validationError !== null || !state.writable || saving}
             onClick={() => void save()}
           >
             {saving ? t('settings.saving') : t('settings.save')}
-          </button>
+          </Button>
         </div>
       </footer>
     </section>

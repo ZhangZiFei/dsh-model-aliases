@@ -1,7 +1,6 @@
 import {
   useEffect,
   useMemo,
-  useRef,
   useState,
   useSyncExternalStore,
 } from 'react'
@@ -11,6 +10,11 @@ import type {
   SnapshotStore,
 } from '@deepseek-ai/dsh-client-runtime/client'
 import type { ModelDirectoryState } from '@deepseek-ai/dsh-client-ui-model-selection/client'
+import {
+  IconChevronDownOutline14,
+  Menu,
+  type MenuEntry,
+} from '@deepseek-ai/dsh-client-ui-primitives'
 import type {
   InjectFace,
   PropsLocale,
@@ -60,7 +64,6 @@ export function AliasSelector(props: AliasSelectorProps) {
   )
   const [open, setOpen] = useState(false)
   const [selectError, setSelectError] = useState<string | null>(null)
-  const rootRef = useRef<HTMLDivElement>(null)
   const configuredAliases = aliasState.value?.aliases ?? []
 
   const currentAlias = useMemo(
@@ -71,15 +74,6 @@ export function AliasSelector(props: AliasSelectorProps) {
   useEffect(() => {
     if (available) loadDirectory()
   }, [available, loadDirectory])
-
-  useEffect(() => {
-    if (!open) return
-    const closeOutside = (event: MouseEvent) => {
-      if (event.target instanceof Node && !rootRef.current?.contains(event.target)) setOpen(false)
-    }
-    document.addEventListener('mousedown', closeOutside)
-    return () => document.removeEventListener('mousedown', closeOutside)
-  }, [open])
 
   if (!available) return null
 
@@ -103,59 +97,77 @@ export function AliasSelector(props: AliasSelectorProps) {
   const loading = aliasState.status === 'loading'
     || directoryState.status === 'idle'
     || directoryState.status === 'loading'
+  const error = selectError ?? directoryState.error
+  const selectedIndex = currentAlias === undefined
+    ? -1
+    : configuredAliases.findIndex((alias) => alias.name === currentAlias.name)
+  const items: MenuEntry[] = [
+    ...(error === null ? [] : [{
+      id: 'status:error',
+      label: <span className="dma-selector__error">{error}</span>,
+      disabled: true,
+    }]),
+    ...(loading ? [{
+      id: 'status:loading',
+      label: <span className="dma-selector__message">{t('selector.loading')}</span>,
+      disabled: true,
+    }] : []),
+    ...(!loading && configuredAliases.length === 0 ? [{
+      id: 'status:empty',
+      label: <span className="dma-selector__message">{t('selector.empty')}</span>,
+      disabled: true,
+    }] : []),
+    ...configuredAliases.map((alias, index) => {
+      const availability = aliasAvailability(alias, directoryState.groups)
+      const reason = availability.reason === undefined
+        ? undefined
+        : t(`selector.stale.${availability.reason}`)
+      return {
+        id: `alias:${index}`,
+        label: (
+          <span className="dma-selector__item" title={reason}>
+            <span className="dma-selector__item-name">{alias.name}</span>
+            <span className="dma-selector__item-route">{routeLabel(alias)}</span>
+            {reason === undefined ? null : (
+              <span className="dma-selector__item-state">{reason}</span>
+            )}
+          </span>
+        ),
+        disabled: !availability.available || directoryState.status === 'selecting',
+      }
+    }),
+  ]
 
   return (
-    <div className="dma-selector" ref={rootRef}>
-      <button
-        type="button"
-        className="dma-selector__trigger"
-        aria-label={t('selector.aria')}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        disabled={locked}
-        title={currentAlias?.name ?? t('selector.custom')}
-        onClick={openMenu}
-      >
-        <span className="dma-selector__label">{currentAlias?.name ?? t('selector.custom')}</span>
-        <span className={`dma-selector__chevron${open ? ' dma-selector__chevron--open' : ''}`}>▼</span>
-      </button>
-      {open && (
-        <div className="dma-selector__menu" role="menu" aria-busy={loading}>
-          {(selectError ?? directoryState.error) !== null && (
-            <div className="dma-selector__error">{selectError ?? directoryState.error}</div>
-          )}
-          {loading && <div className="dma-selector__message">{t('selector.loading')}</div>}
-          {!loading && configuredAliases.length === 0 && (
-            <div className="dma-selector__message">{t('selector.empty')}</div>
-          )}
-          {configuredAliases.map((alias) => {
-            const availability = aliasAvailability(alias, directoryState.groups)
-            const reason = availability.reason === undefined
-              ? undefined
-              : t(`selector.stale.${availability.reason}`)
-            return (
-              <button
-                key={alias.name}
-                type="button"
-                role="menuitemradio"
-                aria-checked={currentAlias?.name === alias.name}
-                className="dma-selector__item"
-                disabled={!availability.available || directoryState.status === 'selecting'}
-                title={reason}
-                onClick={() => void choose(alias)}
-              >
-                <span>
-                  <span className="dma-selector__item-name">{alias.name}</span>
-                  <span className="dma-selector__item-route">{routeLabel(alias)}</span>
-                </span>
-                <span className="dma-selector__item-state">
-                  {currentAlias?.name === alias.name ? '✓' : reason}
-                </span>
-              </button>
-            )
-          })}
-        </div>
+    <Menu
+      className="dma-selector"
+      open={open}
+      portal
+      align="end"
+      side="top"
+      items={items}
+      selectedId={selectedIndex < 0 ? undefined : `alias:${selectedIndex}`}
+      onClose={() => setOpen(false)}
+      onSelect={(id) => {
+        if (!id.startsWith('alias:')) return
+        const alias = configuredAliases[Number(id.slice('alias:'.length))]
+        if (alias !== undefined) void choose(alias)
+      }}
+      anchor={(
+        <button
+          type="button"
+          className="dma-selector__trigger"
+          aria-label={t('selector.aria')}
+          aria-haspopup="menu"
+          aria-expanded={open}
+          disabled={locked}
+          title={currentAlias?.name ?? t('selector.custom')}
+          onClick={openMenu}
+        >
+          <span className="dma-selector__label">{currentAlias?.name ?? t('selector.custom')}</span>
+          <IconChevronDownOutline14 className="dma-selector__chevron" />
+        </button>
       )}
-    </div>
+    />
   )
 }
