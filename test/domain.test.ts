@@ -82,6 +82,59 @@ test('仅在完整选择一致时映射当前别名', () => {
   }), undefined)
 })
 
+test('带模型默认推理等级的选择映射到缺省推理等级的别名', () => {
+  const groups = [{
+    id: 'deepseek',
+    models: [{
+      id: 'deepseek-chat',
+      reasoning: {
+        defaultEffort: 'high',
+        efforts: [{ id: 'low' }, { id: 'high' }],
+      },
+    }],
+  }]
+
+  assert.equal(aliasForSelection(valid.aliases, {
+    provider: 'deepseek',
+    model: 'deepseek-chat',
+    reasoningEffort: 'high',
+  }, groups)?.name, '日常')
+  assert.equal(aliasForSelection(valid.aliases, {
+    provider: 'deepseek',
+    model: 'deepseek-chat',
+    reasoningEffort: 'low',
+  }, groups), undefined)
+  assert.equal(aliasForSelection(valid.aliases, {
+    provider: 'deepseek',
+    model: 'deepseek-chat',
+    reasoningEffort: 'high',
+  }), undefined)
+})
+
+test('显式推理等级别名优先于缺省推理等级别名', () => {
+  const aliases = [
+    { name: '显式', provider: 'deepseek', model: 'chat', reasoningEffort: 'high' },
+    { name: '缺省', provider: 'deepseek', model: 'chat' },
+  ]
+  const groups = [{
+    id: 'deepseek',
+    models: [{
+      id: 'chat',
+      reasoning: { defaultEffort: 'high', efforts: [{ id: 'high' }] },
+    }],
+  }]
+
+  assert.equal(aliasForSelection(aliases, {
+    provider: 'deepseek',
+    model: 'chat',
+    reasoningEffort: 'high',
+  }, groups)?.name, '显式')
+  assert.equal(aliasForSelection(aliases, {
+    provider: 'deepseek',
+    model: 'chat',
+  }, groups)?.name, '缺省')
+})
+
 test('目录可用性分别识别提供商、模型和推理等级失效', () => {
   const groups = [{
     id: 'openai',

@@ -21,6 +21,7 @@ export const DEFAULT_MODEL_ALIASES: readonly ModelAlias[] = [
     name: 'pro',
     provider: 'deepseek-official',
     model: 'deepseek-v4-pro',
+    reasoningEffort: 'max',
   },
 ]
 
@@ -132,9 +133,22 @@ export function sameSelection(left: ModelSelectionLike, right: ModelSelectionLik
 export function aliasForSelection(
   aliases: readonly ModelAlias[],
   selection: ModelSelectionLike | null,
+  groups?: readonly CatalogGroupLike[],
 ): ModelAlias | undefined {
   if (selection === null) return undefined
-  return aliases.find((alias) => sameSelection(alias, selection))
+  const exact = aliases.find((alias) => sameSelection(alias, selection))
+  if (exact !== undefined) return exact
+  // Host 会把生效的模型默认推理等级显式化写入选择；因此缺省推理等级的
+  // 别名与「选择携带目录声明的默认推理等级」等价。
+  if (groups === undefined || selection.reasoningEffort === undefined) return undefined
+  const group = groups.find((candidate) => candidate.id === selection.provider)
+  const model = group?.models.find((candidate) => candidate.id === selection.model)
+  if (model?.reasoning?.defaultEffort !== selection.reasoningEffort) return undefined
+  return aliases.find((alias) =>
+    alias.provider === selection.provider
+    && alias.model === selection.model
+    && alias.reasoningEffort === undefined
+  )
 }
 
 export interface AliasAvailability {

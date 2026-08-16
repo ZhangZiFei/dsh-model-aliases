@@ -67,8 +67,8 @@ export function AliasSelector(props: AliasSelectorProps) {
   const configuredAliases = aliasState.value?.aliases ?? []
 
   const currentAlias = useMemo(
-    () => aliasForSelection(configuredAliases, directoryState.current),
-    [configuredAliases, directoryState.current],
+    () => aliasForSelection(configuredAliases, directoryState.current, directoryState.groups),
+    [configuredAliases, directoryState.current, directoryState.groups],
   )
 
   useEffect(() => {
