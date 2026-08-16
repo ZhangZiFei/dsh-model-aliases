@@ -9,6 +9,21 @@ export interface ModelAliasSettings {
   aliases: ModelAlias[]
 }
 
+/** 首次使用或用户清空别名后自动恢复的默认别名。 */
+export const DEFAULT_MODEL_ALIASES: readonly ModelAlias[] = [
+  {
+    name: 'falsh',
+    provider: 'deepseek-official',
+    model: 'deepseek-v4-flash',
+    reasoningEffort: 'max',
+  },
+  {
+    name: 'pro',
+    provider: 'deepseek-official',
+    model: 'deepseek-v4-pro',
+  },
+]
+
 export interface ModelSelectionLike {
   provider: string
   model: string

@@ -14,6 +14,7 @@
 - 选择仍调用 `ModelDirectory.select()`，保留 DSH 原生路由校验、图片兼容检查、会话状态和默认选择持久化行为。
 - 当前目录中不存在的别名会保留在设置里，但在选择器中禁用并标明原因。
 - 当前完整选择不能精确映射到别名时显示“自定义”。
+- 首次使用自动获得默认别名（falsh / pro）；用户清空并保存别名后也会自动恢复默认列表。
 
 ## 项目结构
 
@@ -166,3 +167,19 @@ model-aliases:
 - 别名名称唯一；
 - provider、model、reasoningEffort 组成的完整选择唯一；
 - 缺省 `reasoningEffort` 表示保留适配器或提供商默认行为。
+
+默认值（从未设置或用户清空后自动恢复）：
+
+```yaml
+model-aliases:
+  aliases:
+    - name: falsh
+      provider: deepseek-official
+      model: deepseek-v4-flash
+      reasoningEffort: max
+    - name: pro
+      provider: deepseek-official
+      model: deepseek-v4-pro
+```
+
+默认别名不参与 catalog 校验：若对应提供商或模型不在当前目录中，别名会保留但在选择器中禁用并标明原因。

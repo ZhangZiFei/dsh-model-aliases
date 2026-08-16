@@ -4,6 +4,7 @@ import {
   aliasAvailability,
   aliasForSelection,
   decodeModelAliasSettings,
+  DEFAULT_MODEL_ALIASES,
   normalizeModelAliases,
   validateModelAliasSettings,
   type ModelAliasSettings,
@@ -53,6 +54,11 @@ test('wire decoder 只接受完整合法的别名设置', () => {
   assert.deepEqual(decodeModelAliasSettings(valid), valid)
   assert.equal(decodeModelAliasSettings({ aliases: [{ name: 'a', provider: 'p' }] }), undefined)
   assert.equal(decodeModelAliasSettings({ aliases: [{ name: 'a', provider: 'p', model: 'm' }, { name: 'a', provider: 'q', model: 'n' }] }), undefined)
+})
+
+test('默认别名必须通过领域校验且本身已规范化', () => {
+  assert.doesNotThrow(() => validateModelAliasSettings({ aliases: [...DEFAULT_MODEL_ALIASES] }))
+  assert.deepEqual(normalizeModelAliases(DEFAULT_MODEL_ALIASES), [...DEFAULT_MODEL_ALIASES])
 })
 
 test('表单标准化保留缺省推理等级语义', () => {

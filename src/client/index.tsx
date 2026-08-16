@@ -9,6 +9,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-model-selection/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import {
   decodeModelAliasSettings,
+  DEFAULT_MODEL_ALIASES,
   type ModelAliasSettings,
 } from '../domain.js'
 import { AliasSelector } from './AliasSelector.js'
@@ -57,6 +58,23 @@ export function apply(ctx: ClientContext): void {
     namespace: 'model-aliases',
     decode: decodeModelAliasSettings,
   })
+
+  // 「从未设置」由 Host schema default 兜底；这里负责用户显式清空后自动恢复默认。
+  // revision 不变不重复尝试，Host 拒绝写入时 recovery read 会保持原 revision，避免重试死循环。
+  ctx.effect(() => {
+    let evaluatedRevision: number | undefined
+    const restoreDefaultsIfEmpty = () => {
+      const snapshot = aliasSettings.getSnapshot()
+      if (snapshot.status !== 'ready' || !snapshot.writable) return
+      if (snapshot.revision === evaluatedRevision) return
+      evaluatedRevision = snapshot.revision
+      const empty = snapshot.value === undefined || snapshot.value.aliases.length === 0
+      if (!empty) return
+      void aliasSettings.set('aliases', [...DEFAULT_MODEL_ALIASES]).catch(() => undefined)
+    }
+    restoreDefaultsIfEmpty()
+    return aliasSettings.subscribe(restoreDefaultsIfEmpty)
+  }, 'model-aliases: restore defaults after clearing')
 
   const loadCatalog = async (sessionId: SessionId): Promise<SessionModels> => {
     if (ctx.sessions.subagentAddress(sessionId) !== undefined) {
