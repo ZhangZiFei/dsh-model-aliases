@@ -1,0 +1,36 @@
+export declare const NS: "settings.model-aliases";
+export declare const zh: {
+    readonly nav: "模型别名";
+    readonly 'selector.aria': "选择模型别名";
+    readonly 'selector.custom': "自定义";
+    readonly 'selector.empty': "尚未配置模型别名";
+    readonly 'selector.loading': "正在加载模型别名…";
+    readonly 'selector.retry': "重试";
+    readonly 'selector.stale.provider': "提供商当前不可用";
+    readonly 'selector.stale.model': "模型当前不可用";
+    readonly 'selector.stale.effort': "推理等级当前不可用";
+    readonly 'settings.title': "模型别名";
+    readonly 'settings.description': "用一个易记名称绑定提供商、模型和可选推理等级。会话中的别名选择仍通过 DSH 原生模型校验链路提交。";
+    readonly 'settings.loading': "正在读取设置…";
+    readonly 'settings.catalogLoading': "正在读取当前会话的模型目录…";
+    readonly 'settings.catalogUnavailable': "当前无法读取模型目录；仍可手动填写路由 ID。";
+    readonly 'settings.empty': "还没有别名。添加一个别名后，它会出现在输入框右侧。";
+    readonly 'settings.add': "添加别名";
+    readonly 'settings.save': "保存";
+    readonly 'settings.saving': "保存中…";
+    readonly 'settings.saved': "设置已保存";
+    readonly 'settings.readOnly': "当前设置提供方只读。";
+    readonly 'settings.aliasName': "别名";
+    readonly 'settings.provider': "提供商";
+    readonly 'settings.model': "模型";
+    readonly 'settings.effort': "推理等级";
+    readonly 'settings.providerDefault': "提供商默认";
+    readonly 'settings.remove': "删除";
+    readonly 'settings.moveUp': "上移";
+    readonly 'settings.moveDown': "下移";
+    readonly 'settings.unavailable': "不可用";
+    readonly 'settings.manualHint': "请填写 DSH 使用的精确路由 ID。";
+};
+export type ModelAliasesKey = keyof typeof zh;
+export declare const en: Record<ModelAliasesKey, string>;
+//# sourceMappingURL=locales.d.ts.map
