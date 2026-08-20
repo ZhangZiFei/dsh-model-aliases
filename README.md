@@ -1,153 +1,50 @@
-# DSH 模型别名插件
+<h1 align="center">dsh-model-aliases</h1>
 
-这是一个安装式 Host + Client Cordis 插件，为 DeepSeek Harness Web 提供持久化模型别名。
+<p align="center">给模型配置起个好记的名字，然后在 DeepSeek Harness 会话里一键切换。</p>
 
-## 功能
+在输入框旁直接选择别名，不再分别寻找提供商、模型和推理等级：
 
-- Host 注册 `model-aliases` 设置命名空间，配置写入 DSH 现有设置提供方。
-- 设置面板新增“模型别名”页面，可绑定：
-  - 唯一别名；
-  - provider 路由；
-  - model ID；
-  - 可选 reasoning effort。
-- 输入框右侧以单一别名选择器替换默认“模型 / 推理等级”控件。
-- 选择仍调用 `ModelDirectory.select()`，保留 DSH 原生路由校验、图片兼容检查、会话状态和默认选择持久化行为。
-- 当前目录中不存在的别名会保留在设置里，但在选择器中禁用并标明原因。
-- 当前完整选择不能精确映射到别名时显示“自定义”。
-- 首次使用自动获得默认别名（falsh / pro）；用户清空并保存别名后也会自动恢复默认列表。
+![模型别名选择器](assets/alias-selector.png)
 
-## 项目结构
+在 **设置 → 模型别名** 中集中编辑：
 
-- `src/index.ts`：Host 插件与 Schemastery 设置 schema。
-- `src/domain.ts`：共享领域类型、校验和选择映射。
-- `src/client/index.tsx`：Client Cordis 注册入口。
-- `src/client/AliasSelector.tsx`：会话模型别名选择器。
-- `src/client/AliasSettingsSection.tsx`：别名设置页面。
-- Client 持久化复用 `ctx.settingsScope`，由 DSH 处理 revision、串行写入、重连和外部更新。
-- `test/domain.test.ts`：领域规则测试。
+![模型别名设置页面](assets/alias-settings.png)
 
-## 开发
+## 安装
 
-```powershell
-pnpm install
-pnpm build
-pnpm test
+```sh
+dsh plugin --profile web add github:ZhangZiFei/dsh-model-aliases
 ```
 
-构建产物：
+重启当前 `dsh web` 进程并刷新页面，然后打开 **设置 → 模型别名**。
 
-- `lib/index.js`：Host 入口；
-- `lib/client.js`：DSH ModuleLoader 格式的浏览器包；
-- `lib/types/`：TypeScript 声明。
+**当前兼容目标为 DeepSeek Harness Web 0.1.0-rc.6。** 插件已经声明 DSH Bundle，安装命令会自动把对应 Patch 加入 Web Profile，无需手工编辑 `cordis.patch.yml`。
 
-## 安装到 DSH
+## 你会得到
 
-插件必须同时满足以下条件：
+- **一个别名代表完整模型配置**——名称同时绑定提供商、模型和可选推理等级
+- **单一会话选择器**——用别名选择器遮蔽默认“模型 / 推理等级”控件
+- **原生模型选择链路**——所有选择仍交给 DSH `ModelDirectory.select()` 校验和应用
+- **持久化设置**——配置写入 DSH 的 `model-aliases` 设置命名空间，重启后继续生效
+- **目录感知**——直接选择当前会话可用的提供商、模型和模型声明的推理等级
+- **安全保留失效配置**——目录中暂时不存在的别名不会丢失，但会禁用并说明原因
+- **准确显示当前状态**——完整选择匹配别名时显示别名，否则显示“自定义”
+- **遵守会话限制**——锁定状态下禁止切换，被寻址的子代理会话不显示选择器
 
-1. `dsh-model-aliases` 能从 Web Profile 的 Node 解析路径找到；
-2. Web Profile 的 Cordis Patch 中存在插件行；
-3. 原有 `@deepseek-ai/dsh-client-ui-model-selection` 保持挂载，以提供 `modelDirectories` 服务；
-4. Host 已挂载可写的 `settings` 提供方。
+## 使用
 
-### 1. 构建插件
+1. 打开 **设置 → 模型别名**。
+2. 添加别名，选择提供商、模型以及可选推理等级。
+3. 调整顺序并保存。
+4. 回到会话，在输入框右侧选择需要的别名。
 
-```powershell
-cd D:\Agents\temp\dsh-model-aliases
-pnpm install
-pnpm build
-pnpm test
-```
+推理等级选择“提供商默认”时，插件不会写入虚构的默认值，而是保留适配器或提供商的原始行为。
 
-### 2. 链接到 Web Profile
+首次使用会写入预置别名；如果保存空列表，插件也会自动恢复预置值。预置路由不在当前模型目录时会保留，但不能被选择。
 
-在插件目录执行：
+## 设置格式
 
-```powershell
-dsh plugin --profile web add link:.
-```
-
-`dsh` 会把相对路径锚定到当前插件目录，并将其作为 Web Profile 的本地链接依赖。CLI 可能提示：
-
-```text
-declares no dsh.bundle — installed as a plain dependency
-```
-
-这是正常提示：本项目是由 Cordis Patch 挂载的普通插件，不是提供整套 Profile Patch 的 Bundle。
-
-验证依赖已经解析：
-
-```powershell
-dsh plugin --profile web why dsh-model-aliases
-```
-
-### 3. 添加 Cordis 插件行
-
-编辑 `$DSH_HOME\profiles\web\cordis.patch.yml`。当前机器的默认位置是：
-
-```text
-C:\Users\zhang\.dsh\profiles\web\cordis.patch.yml
-```
-
-如果文件内容仍是 `[]`，将它替换为：
-
-```yaml
-# 本机 Web Profile 自定义插件
-- insert:
-    - id: model-aliases
-      name: dsh-model-aliases
-```
-
-不要修改全局 npm 安装目录中的 `@deepseek-ai/dsh-web-app/cordis.patch.yml`；该文件属于已安装发行包，升级时会被覆盖。
-
-这个用户 Patch 在 `dsh-web-app` Bundle 之后应用，因此插件会在默认 `ui-model-selection` 行之后插入。Client 清单负责等待模型选择、设置、会话和本地化插件；`conversation.input.model` 使用 `priority: -1` 遮蔽默认 occupant，不修改默认组件源码。
-
-### 4. 验证组合
-
-```powershell
-dsh web --dump-config | Select-String -Pattern "model-aliases"
-```
-
-输出中应同时出现：
-
-```yaml
-id: model-aliases
-name: dsh-model-aliases
-```
-
-### 5. 重启并验证页面
-
-必须重启当前正在服务 `http://127.0.0.1:3080` 的 DSH Web 进程，然后刷新页面；不要另起第二个服务器。重启当前进程可能中断正在进行的会话。
-
-重启后验证：
-
-- 设置面板出现“模型别名”页面；
-- 输入框右侧显示别名选择器；
-- 新增并保存别名后，设置写入 `$DSH_HOME\settings.yaml` 的 `model-aliases` 分节；
-- 选择别名后，会话模型通过原生 `ModelDirectory.select()` 链路更新。
-
-### 更新本地插件
-
-`link:.` 会直接引用本项目。修改源码后只需重新构建：
-
-```powershell
-cd D:\Agents\temp\dsh-model-aliases
-pnpm build
-```
-
-随后重启当前 DSH Web 进程。没有运行 DSH checkout 的 `pnpm run dev:web` watcher 时，不应期待 Client 代码自动热更新。
-
-### 卸载
-
-1. 从 `$DSH_HOME\profiles\web\cordis.patch.yml` 删除 `model-aliases` 插入行；
-2. 执行：
-
-```powershell
-dsh plugin --profile web remove dsh-model-aliases
-```
-
-3. 重启当前 DSH Web 进程。
-
-## 数据格式
+配置保存在 DSH 设置文档的 `model-aliases` 分节：
 
 ```yaml
 model-aliases:
@@ -161,25 +58,40 @@ model-aliases:
       reasoningEffort: high
 ```
 
-约束：
+规则：
 
-- 所有字段必须是首尾无空白的非空字符串；
-- 别名名称唯一；
-- provider、model、reasoningEffort 组成的完整选择唯一；
-- 缺省 `reasoningEffort` 表示保留适配器或提供商默认行为。
+- 名称、提供商、模型以及存在的推理等级必须是首尾无空白的非空字符串
+- 别名名称必须唯一
+- 提供商、模型和推理等级组成的完整选择必须唯一
+- 省略 `reasoningEffort` 表示使用适配器或提供商默认行为
 
-默认值（从未设置或用户清空后自动恢复）：
+## 卸载
 
-```yaml
-model-aliases:
-  aliases:
-    - name: falsh
-      provider: deepseek-official
-      model: deepseek-v4-flash
-      reasoningEffort: max
-    - name: pro
-      provider: deepseek-official
-      model: deepseek-v4-pro
+```sh
+dsh plugin --profile web remove dsh-model-aliases
 ```
 
-默认别名不参与 catalog 校验：若对应提供商或模型不在当前目录中，别名会保留但在选择器中禁用并标明原因。
+完成后重启当前 `dsh web` 进程并刷新页面。
+
+## 开发
+
+```sh
+pnpm install
+pnpm run build
+pnpm test
+pnpm pack --dry-run
+```
+
+构建产物位于 `lib/`：
+
+- `lib/index.js`：Host 插件入口
+- `lib/client.js`：Web Client Bundle
+- `lib/types/`：TypeScript 声明
+
+## 反馈
+
+发现问题或有功能建议，请提交到 [GitHub Issues](https://github.com/ZhangZiFei/dsh-model-aliases/issues)。
+
+## 许可
+
+MIT
