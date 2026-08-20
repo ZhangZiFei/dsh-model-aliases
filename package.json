@@ -51,6 +51,7 @@
     "types": "tsc -p tsconfig.types.json",
     "bundle": "tsdown",
     "build": "pnpm run clean && pnpm run typecheck && pnpm run types && pnpm run bundle",
+    "prepare": "pnpm run build",
     "test": "node --import tsx --test test/**/*.test.ts"
   },
   "dependencies": {
