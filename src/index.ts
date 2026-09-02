@@ -1,6 +1,6 @@
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import { settingsNamespace } from '@deepseek-ai/dsh-settings'
+import type {} from '@deepseek-ai/dsh-settings'
 import {
   validateModelAliasSettings,
   DEFAULT_MODEL_ALIASES,
@@ -10,7 +10,7 @@ import {
 
 export * from './domain.js'
 
-export const MODEL_ALIASES_SETTINGS_NAMESPACE = settingsNamespace('model-aliases')
+export const MODEL_ALIASES_SETTINGS_NAMESPACE = 'model-aliases' as const
 
 export const MODEL_ALIAS_SCHEMA: z<ModelAlias> = z.object({
   name: z.string().required().description('选择器中显示的唯一别名'),
@@ -31,7 +31,6 @@ export const inject = ['settings']
 export function apply(ctx: Context): void {
   const options = {
     applies: 'live',
-    expose: 'configuration-client',
     validate: validateModelAliasSettings,
   } as const
   ctx.settings.register(
