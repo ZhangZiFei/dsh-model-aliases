@@ -92,9 +92,13 @@ export function apply(ctx: Context): void {
     return ctx.modelDirectories.directoryFor(sessionId).load()
   }
 
-  ctx.slots.inject('conversation.input.model', () => ctx.slots.register({
-    name: 'conversation.input.model',
-    priority: -1,
+  // 别名选择器是输入框工具行里的独立控件：原生「模型 / 推理等级」座位保持可见，
+  // 两侧共用同一个 per-session ModelDirectory，因此别名选择会立刻改变原生座位的内容，
+  // 在原生座位上手动选择模型或推理等级也会立刻反映到别名选择器。
+  ctx.slots.inject('conversation.input.right', () => ctx.slots.register({
+    name: 'conversation.input.right',
+    id: 'model-aliases',
+    order: 10,
     locale: NS,
     inject: (sessionId) => {
       const directory = ctx.modelDirectories.directoryFor(sessionId)
