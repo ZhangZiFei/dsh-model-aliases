@@ -46,6 +46,7 @@
 - 不直接另起 `sessions.models()` 或 `sessions.selectModel()` 状态链路。
 - 别名选择器注册到 `conversation.input.right`（list 插槽），不得遮蔽 `conversation.input.model` 原生座位；保留原 `ui-model-selection` 插件以提供 `modelDirectories` 和原生座位。
 - 别名只是完整选择的快捷方式：选择别名通过同一个 `ModelDirectory.select()` 改写原生座位内容，原生座位上的手动选择也直接决定别名选择器的显示。
+- 该插槽的条目固定渲染在原生座位左侧；视觉顺序只靠 `styles.ts` 里的 flex `order` 规则排到原生座位右侧、发送按钮之前，不得为此改用 DOM 搬移或复制原生组件。
 - 当前别名始终由完整选择 `{ provider, model, reasoningEffort? }` 推导，不保存独立的 `selectedAliasId`。
 - 工具行插槽没有 owner 的 `locked` 共享，组件必须用 `useSession()` 的会话事实（`removed`）自行关闭交互。
 - 使用 `sessions.subagentAddress(sessionId)` 阻止被寻址子代理会话进行模型选择。
