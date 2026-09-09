@@ -11,7 +11,7 @@
 - Client 使用单一别名选择器遮蔽默认“模型 / 推理等级”控件；
 - 所有模型选择必须继续经过 DSH 原生 `ModelDirectory.select()` 链路。
 
-当前兼容目标为 DeepSeek Harness `0.1.0-rc.6`。
+当前兼容目标为 DeepSeek Harness `0.1.2-rc.1`。
 
 ## 语言与实现原则
 
@@ -26,7 +26,7 @@
 ### Host
 
 - 设置 namespace 固定为 `model-aliases`。
-- 使用 `settingsNamespace()` 和 Schemastery schema 注册 namespace。
+- 使用字符串 namespace 和 Schemastery schema 注册（`settingsNamespace()` 已在 0.1.2 移除）。
 - `settings` 是硬依赖；不要增加进程内配置回退。
 - 跨字段约束放在 `validateModelAliasSettings()` 中。
 - `reasoningEffort` 缺省表示保留适配器或提供商默认行为，不得自动写入虚构默认值。

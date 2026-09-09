@@ -5,10 +5,8 @@ import {
   useSyncExternalStore,
 } from 'react'
 import type { ModelSelection } from '@deepseek-ai/dsh-api-remotes/client'
-import type {
-  SettingsScope,
-  SnapshotStore,
-} from '@deepseek-ai/dsh-client-runtime/client'
+import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
+import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { ModelDirectoryState } from '@deepseek-ai/dsh-client-ui-model-selection/client'
 import {
   IconChevronDownOutline14,

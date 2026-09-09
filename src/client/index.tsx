@@ -1,11 +1,10 @@
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
-import type {
-  SessionId,
-  SessionModels,
-} from '@deepseek-ai/dsh-api-remotes/client'
+import type { Context } from '@deepseek-ai/cordis'
+import type { SessionId } from '@deepseek-ai/dsh-api-remotes/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
-import type {} from '@deepseek-ai/dsh-client-ui-model-selection/client'
+import type { ModelDirectoryState } from '@deepseek-ai/dsh-client-ui-model-selection/client'
+import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
+import type {} from '@deepseek-ai/dsh-client-ui-session/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import {
   decodeModelAliasSettings,
@@ -39,7 +38,17 @@ export const inject = [
   'modelDirectories',
 ]
 
-export function apply(ctx: ClientContext): void {
+/**
+ * `ctx.sessions` 的客户端切片。Host 的 @deepseek-ai/dsh-session 也向 cordis
+ * Context 合并了同名的 `sessions`（host 版 SessionStore），两份声明类型不同，
+ * skipLibCheck 下客户端声明会被静默丢弃，因此按需声明结构化切片。
+ */
+interface ClientSessionsFace {
+  subagentAddress(id: SessionId): unknown
+}
+
+export function apply(ctx: Context): void {
+  const sessions = ctx.sessions as unknown as ClientSessionsFace
   ctx.effect(
     () => ctx.locale.register(NS, { zh, en }),
     'model-aliases: locale dictionaries',
@@ -76,8 +85,8 @@ export function apply(ctx: ClientContext): void {
     return aliasSettings.subscribe(restoreDefaultsIfEmpty)
   }, 'model-aliases: restore defaults after clearing')
 
-  const loadCatalog = async (sessionId: SessionId): Promise<SessionModels> => {
-    if (ctx.sessions.subagentAddress(sessionId) !== undefined) {
+  const loadCatalog = async (sessionId: SessionId): Promise<ModelDirectoryState> => {
+    if (sessions.subagentAddress(sessionId) !== undefined) {
       throw new Error('被寻址的子代理会话不支持模型选择')
     }
     return ctx.modelDirectories.directoryFor(sessionId).load()
@@ -89,7 +98,7 @@ export function apply(ctx: ClientContext): void {
     locale: NS,
     inject: (sessionId) => {
       const directory = ctx.modelDirectories.directoryFor(sessionId)
-      const available = ctx.sessions.subagentAddress(sessionId) === undefined
+      const available = sessions.subagentAddress(sessionId) === undefined
       return {
         available,
         aliases: aliasSettings,

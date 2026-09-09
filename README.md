@@ -18,7 +18,7 @@ dsh plugin --profile web add github:ZhangZiFei/dsh-model-aliases
 
 重启当前 `dsh web` 进程并刷新页面，然后打开 **设置 → 模型别名**。
 
-**当前兼容目标为 DeepSeek Harness Web 0.1.0-rc.6。** 插件已经声明 DSH Bundle，安装命令会自动把对应 Patch 加入 Web Profile，无需手工编辑 `cordis.patch.yml`。
+**当前兼容目标为 DeepSeek Harness Web 0.1.2-rc.1。** 插件已经声明 DSH Bundle，安装命令会自动把对应 Patch 加入 Web Profile，无需手工编辑 `cordis.patch.yml`。
 
 ## 你会得到
 
