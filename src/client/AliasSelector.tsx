@@ -34,7 +34,7 @@ export interface AliasSelectorInjected {
   select: (selection: ModelSelection) => Promise<boolean>
 }
 
-type AliasSelectorProps = PropsRuntime<'conversation.input.model'>
+type AliasSelectorProps = PropsRuntime<'conversation.input.right'>
   & InjectFace<AliasSelectorInjected>
   & PropsLocale<typeof NS>
 
@@ -42,16 +42,24 @@ function routeLabel(alias: ModelAlias): string {
   return `${alias.provider} / ${alias.model}${alias.reasoningEffort === undefined ? '' : ` / ${alias.reasoningEffort}`}`
 }
 
+/**
+ * 输入框工具行中的别名选择器：与原生「模型 / 推理等级」座位并存。
+ * 两侧读写同一个 per-session ModelDirectory，别名只是完整选择的快捷方式；
+ * 原生座位上的手动选择会立刻反映为别名或“自定义”。
+ */
 export function AliasSelector(props: AliasSelectorProps) {
   const {
-    locked,
     available,
     aliases,
     directory,
     loadDirectory,
     select,
     t,
+    useSession,
   } = props
+  // 原生座位由 composer 通过 owner 的 locked 关闭；工具行插槽没有该 owner 共享，
+  // 这里用会话生命周期中同一个 removed 事实禁用，避免会话已删除后仍能切换。
+  const locked = useSession((snapshot) => snapshot.removed)
   const aliasState = useSyncExternalStore(
     (listener) => aliases.subscribe(listener),
     () => aliases.getSnapshot(),
@@ -164,7 +172,7 @@ export function AliasSelector(props: AliasSelectorProps) {
           aria-haspopup="menu"
           aria-expanded={open}
           disabled={locked}
-          title={currentAlias?.name ?? t('selector.custom')}
+          title={currentAlias === undefined ? t('selector.custom') : routeLabel(currentAlias)}
           onClick={openMenu}
         >
           <span className="dma-selector__label">{currentAlias?.name ?? t('selector.custom')}</span>

@@ -12,7 +12,12 @@ export interface AliasSelectorInjected {
     loadDirectory: () => void;
     select: (selection: ModelSelection) => Promise<boolean>;
 }
-type AliasSelectorProps = PropsRuntime<'conversation.input.model'> & InjectFace<AliasSelectorInjected> & PropsLocale<typeof NS>;
+type AliasSelectorProps = PropsRuntime<'conversation.input.right'> & InjectFace<AliasSelectorInjected> & PropsLocale<typeof NS>;
+/**
+ * 输入框工具行中的别名选择器：与原生「模型 / 推理等级」座位并存。
+ * 两侧读写同一个 per-session ModelDirectory，别名只是完整选择的快捷方式；
+ * 原生座位上的手动选择会立刻反映为别名或“自定义”。
+ */
 export declare function AliasSelector(props: AliasSelectorProps): import("react").JSX.Element | null;
 export {};
 //# sourceMappingURL=AliasSelector.d.ts.map

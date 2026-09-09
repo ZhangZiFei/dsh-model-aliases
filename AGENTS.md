@@ -8,7 +8,7 @@
 
 - Host 注册并拥有持久化的 `model-aliases` 设置命名空间；
 - Client 在设置面板提供别名编辑页面；
-- Client 使用单一别名选择器遮蔽默认“模型 / 推理等级”控件；
+- Client 在输入框工具行提供别名选择器，与原生“模型 / 推理等级”控件并存；
 - 所有模型选择必须继续经过 DSH 原生 `ModelDirectory.select()` 链路。
 
 当前兼容目标为 DeepSeek Harness `0.1.2-rc.1`。
@@ -44,9 +44,10 @@
 
 - 必须复用 `ctx.modelDirectories.directoryFor(sessionId)`。
 - 不直接另起 `sessions.models()` 或 `sessions.selectModel()` 状态链路。
-- `conversation.input.model` 使用 `priority: -1` 遮蔽默认 occupant；保留原 `ui-model-selection` 插件以提供 `modelDirectories`。
+- 别名选择器注册到 `conversation.input.right`（list 插槽），不得遮蔽 `conversation.input.model` 原生座位；保留原 `ui-model-selection` 插件以提供 `modelDirectories` 和原生座位。
+- 别名只是完整选择的快捷方式：选择别名通过同一个 `ModelDirectory.select()` 改写原生座位内容，原生座位上的手动选择也直接决定别名选择器的显示。
 - 当前别名始终由完整选择 `{ provider, model, reasoningEffort? }` 推导，不保存独立的 `selectedAliasId`。
-- 组件必须尊重 owner 的 `locked`。
+- 工具行插槽没有 owner 的 `locked` 共享，组件必须用 `useSession()` 的会话事实（`removed`）自行关闭交互。
 - 使用 `sessions.subagentAddress(sessionId)` 阻止被寻址子代理会话进行模型选择。
 - catalog 只用于判断能否发起新的选择：别名不在 catalog 时应保留但禁用；不能据此断言当前 route 一定不可路由。
 - reasoning effort 必须来自目标模型的 reasoning metadata，不得维护全局固定词表。
