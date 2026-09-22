@@ -16,7 +16,6 @@ import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
 import {
   Button,
   IconChevronDownOutline14,
-  IconChevronUpOutline14,
   Menu,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type {
@@ -175,6 +174,10 @@ export function AliasSettingsSection(props: AliasSettingsSectionProps) {
     groups: [],
     error: null,
   })
+  // 拖拽排序状态
+  const [dragIndex, setDragIndex] = useState<number | null>(null)
+  const [dropIndex, setDropIndex] = useState<number | null>(null)
+  const [dropAfter, setDropAfter] = useState(false)
 
   useEffect(() => {
     setDraft((state.value?.aliases ?? []).map((alias) => ({ ...alias })))
@@ -231,15 +234,13 @@ export function AliasSettingsSection(props: AliasSettingsSectionProps) {
     ])
   }
 
-  const moveAlias = (index: number, offset: -1 | 1) => {
-    const target = index + offset
-    if (target < 0 || target >= draft.length) return
+  const moveAlias = (from: number, to: number) => {
+    if (from === to || from < 0 || to < 0 || from >= draft.length || to >= draft.length) return
     setSaveError(null)
     setDraft((current) => {
       const next = [...current]
-      const swapped = next[index]!
-      next[index] = next[target]!
-      next[target] = swapped
+      const [moved] = next.splice(from, 1)
+      next.splice(to, 0, moved!)
       return next
     })
   }
@@ -256,6 +257,48 @@ export function AliasSettingsSection(props: AliasSettingsSectionProps) {
       setSaveError('设置未被 Host 接受，请检查连接或重新加载后再试。')
     }
     setSaving(false)
+  }
+
+  const resetDrag = () => {
+    setDragIndex(null)
+    setDropIndex(null)
+    setDropAfter(false)
+  }
+
+  const handleDragStart = (index: number) => (event: React.DragEvent) => {
+    event.dataTransfer.setData('text/plain', String(index))
+    event.dataTransfer.effectAllowed = 'move'
+    setDragIndex(index)
+  }
+
+  const handleDragOver = (index: number) => (event: React.DragEvent) => {
+    if (dragIndex === null) return
+    event.preventDefault()
+    const rect = event.currentTarget.getBoundingClientRect()
+    const after = event.clientY > rect.top + rect.height / 2
+    setDropIndex(index)
+    setDropAfter(after)
+  }
+
+  const handleDrop = (index: number) => (event: React.DragEvent) => {
+    event.preventDefault()
+    const from = Number(event.dataTransfer.getData('text/plain'))
+    if (Number.isNaN(from)) return
+    const to = dropAfter ? index + 1 : index
+    // 如果源在目标之前，删除后目标索引会前移一位
+    const adjustedTo = from < to ? to - 1 : to
+    moveAlias(from, adjustedTo)
+    resetDrag()
+  }
+
+  const handleKeyDown = (index: number) => (event: React.KeyboardEvent) => {
+    if (event.key === 'ArrowUp' && index > 0) {
+      event.preventDefault()
+      moveAlias(index, index - 1)
+    } else if (event.key === 'ArrowDown' && index < draft.length - 1) {
+      event.preventDefault()
+      moveAlias(index, index + 1)
+    }
   }
 
   const loading = state.status === 'loading'
@@ -287,133 +330,164 @@ export function AliasSettingsSection(props: AliasSettingsSectionProps) {
         {draft.length === 0 && !loading && (
           <div className="dma-settings__empty">{t('settings.empty')}</div>
         )}
-        {draft.map((alias, index) => {
-          const selectedGroup = catalog.groups.find((group) => group.id === alias.provider)
-          const selectedModel = modelFor(catalog.groups, alias.provider, alias.model)
-          return (
-            <article className="dma-alias-card" key={index}>
-              <label className="dma-field">
-                <span>{t('settings.aliasName')}</span>
-                <input
-                  value={alias.name}
-                  onChange={(event) => replaceAt(index, { ...alias, name: event.target.value })}
-                />
-              </label>
 
-              <div className="dma-field">
-                <span>{t('settings.provider')}</span>
-                <SettingsCombobox
-                  value={alias.provider}
-                  ariaLabel={t('settings.provider')}
-                  openOptionsLabel={t('settings.openOptions')}
-                  placeholder={t('settings.manualHint')}
-                  options={catalog.groups.map((group) => ({
-                    value: group.id,
-                    label: group.name,
-                  }))}
-                  onInput={(provider) => replaceAt(index, { ...alias, provider })}
-                  onSelect={(provider) => {
-                    const group = catalog.groups.find((entry) => entry.id === provider)
-                    replaceAt(index, {
-                      name: alias.name,
-                      provider,
-                      model: group?.models[0]?.id ?? '',
-                    })
-                  }}
-                />
-              </div>
+        {draft.length > 0 && (
+          <div className="dma-alias-table" role="table" aria-label={t('settings.title')}>
+            {/* 表头 */}
+            <div className="dma-alias-row dma-alias-row--header" role="row">
+              <span className="dma-alias-cell dma-alias-cell--handle" aria-hidden="true" />
+              <span className="dma-alias-cell dma-alias-cell--name">{t('settings.aliasName')}</span>
+              <span className="dma-alias-cell dma-alias-cell--provider">{t('settings.provider')}</span>
+              <span className="dma-alias-cell dma-alias-cell--model">{t('settings.model')}</span>
+              <span className="dma-alias-cell dma-alias-cell--effort">{t('settings.effort')}</span>
+              <span className="dma-alias-cell dma-alias-cell--remove" aria-hidden="true" />
+            </div>
 
-              <div className="dma-field">
-                <span>{t('settings.model')}</span>
-                <SettingsCombobox
-                  value={alias.model}
-                  ariaLabel={t('settings.model')}
-                  openOptionsLabel={t('settings.openOptions')}
-                  placeholder={t('settings.manualHint')}
-                  options={selectedGroup?.models.map((model) => ({
-                    value: model.id,
-                    label: model.name,
-                  })) ?? []}
-                  onInput={(model) => replaceAt(index, { ...alias, model })}
-                  onSelect={(model) => replaceAt(index, {
-                    name: alias.name,
-                    provider: alias.provider,
-                    model,
-                  })}
-                />
-              </div>
+            {/* 数据行 */}
+            {draft.map((alias, index) => {
+              const selectedGroup = catalog.groups.find((group) => group.id === alias.provider)
+              const selectedModel = modelFor(catalog.groups, alias.provider, alias.model)
+              const isDragging = dragIndex === index
+              const isDropTarget = dropIndex === index && dragIndex !== null
+              const rowClasses = [
+                'dma-alias-row',
+                'dma-alias-row--data',
+                isDragging ? 'dma-alias-row--dragging' : '',
+                isDropTarget && !dropAfter ? 'dma-alias-row--drop-before' : '',
+                isDropTarget && dropAfter ? 'dma-alias-row--drop-after' : '',
+              ].filter(Boolean).join(' ')
 
-              <div className="dma-field">
-                <span>{t('settings.effort')}</span>
-                <SettingsCombobox
-                  value={alias.reasoningEffort ?? ''}
-                  ariaLabel={t('settings.effort')}
-                  openOptionsLabel={t('settings.openOptions')}
-                  placeholder={t('settings.providerDefault')}
-                  options={[
-                    { value: '', label: t('settings.providerDefault') },
-                    ...(selectedModel?.reasoning?.efforts.map((effort) => ({
-                      value: effort.id,
-                      label: effort.name,
-                    })) ?? []),
-                  ]}
-                  onInput={(value) => {
-                    const next: ModelAlias = {
-                      name: alias.name,
-                      provider: alias.provider,
-                      model: alias.model,
-                    }
-                    if (value.length > 0) next.reasoningEffort = value
-                    replaceAt(index, next)
-                  }}
-                  onSelect={(value) => {
-                    const next: ModelAlias = {
-                      name: alias.name,
-                      provider: alias.provider,
-                      model: alias.model,
-                    }
-                    if (value.length > 0) next.reasoningEffort = value
-                    replaceAt(index, next)
-                  }}
-                />
-              </div>
-
-              <div className="dma-alias-card__actions">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  aria-label={t('settings.moveUp')}
-                  disabled={index === 0}
-                  onClick={() => moveAlias(index, -1)}
+              return (
+                <div
+                  key={index}
+                  className={rowClasses}
+                  role="row"
+                  draggable={state.writable}
+                  onDragStart={handleDragStart(index)}
+                  onDragOver={handleDragOver(index)}
+                  onDrop={handleDrop(index)}
+                  onDragEnd={resetDrag}
                 >
-                  <IconChevronUpOutline14 />
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  aria-label={t('settings.moveDown')}
-                  disabled={index === draft.length - 1}
-                  onClick={() => moveAlias(index, 1)}
-                >
-                  <IconChevronDownOutline14 />
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="dma-button--danger"
-                  onClick={() => {
-                    setSaveError(null)
-                    setDraft((current) => current.filter((_, at) => at !== index))
-                  }}
-                >
-                  {t('settings.remove')}
-                </Button>
-              </div>
-            </article>
-          )
-        })}
+                  {/* 拖拽手柄 */}
+                  <span className="dma-alias-cell dma-alias-cell--handle">
+                    <button
+                      type="button"
+                      className="dma-drag-handle"
+                      aria-label={`${t('settings.aliasName')} ${alias.name}`}
+                      disabled={!state.writable}
+                      onKeyDown={handleKeyDown(index)}
+                    >
+                      <span className="dma-drag-handle__icon" aria-hidden="true" />
+                    </button>
+                  </span>
+
+                  {/* 别名 */}
+                  <span className="dma-alias-cell dma-alias-cell--name">
+                    <input
+                      value={alias.name}
+                      aria-label={t('settings.aliasName')}
+                      onChange={(event) => replaceAt(index, { ...alias, name: event.target.value })}
+                    />
+                  </span>
+
+                  {/* 提供商 */}
+                  <span className="dma-alias-cell dma-alias-cell--provider">
+                    <SettingsCombobox
+                      value={alias.provider}
+                      ariaLabel={t('settings.provider')}
+                      openOptionsLabel={t('settings.openOptions')}
+                      placeholder={t('settings.manualHint')}
+                      options={catalog.groups.map((group) => ({
+                        value: group.id,
+                        label: group.name,
+                      }))}
+                      onInput={(provider) => replaceAt(index, { ...alias, provider })}
+                      onSelect={(provider) => {
+                        const group = catalog.groups.find((entry) => entry.id === provider)
+                        replaceAt(index, {
+                          name: alias.name,
+                          provider,
+                          model: group?.models[0]?.id ?? '',
+                        })
+                      }}
+                    />
+                  </span>
+
+                  {/* 模型 */}
+                  <span className="dma-alias-cell dma-alias-cell--model">
+                    <SettingsCombobox
+                      value={alias.model}
+                      ariaLabel={t('settings.model')}
+                      openOptionsLabel={t('settings.openOptions')}
+                      placeholder={t('settings.manualHint')}
+                      options={selectedGroup?.models.map((model) => ({
+                        value: model.id,
+                        label: model.name,
+                      })) ?? []}
+                      onInput={(model) => replaceAt(index, { ...alias, model })}
+                      onSelect={(model) => replaceAt(index, {
+                        name: alias.name,
+                        provider: alias.provider,
+                        model,
+                      })}
+                    />
+                  </span>
+
+                  {/* 推理等级 */}
+                  <span className="dma-alias-cell dma-alias-cell--effort">
+                    <SettingsCombobox
+                      value={alias.reasoningEffort ?? ''}
+                      ariaLabel={t('settings.effort')}
+                      openOptionsLabel={t('settings.openOptions')}
+                      placeholder={t('settings.providerDefault')}
+                      options={[
+                        { value: '', label: t('settings.providerDefault') },
+                        ...(selectedModel?.reasoning?.efforts.map((effort) => ({
+                          value: effort.id,
+                          label: effort.name,
+                        })) ?? []),
+                      ]}
+                      onInput={(value) => {
+                        const next: ModelAlias = {
+                          name: alias.name,
+                          provider: alias.provider,
+                          model: alias.model,
+                        }
+                        if (value.length > 0) next.reasoningEffort = value
+                        replaceAt(index, next)
+                      }}
+                      onSelect={(value) => {
+                        const next: ModelAlias = {
+                          name: alias.name,
+                          provider: alias.provider,
+                          model: alias.model,
+                        }
+                        if (value.length > 0) next.reasoningEffort = value
+                        replaceAt(index, next)
+                      }}
+                    />
+                  </span>
+
+                  {/* 删除 */}
+                  <span className="dma-alias-cell dma-alias-cell--remove">
+                    <button
+                      type="button"
+                      className="dma-remove-button"
+                      aria-label={`${t('settings.remove')} ${alias.name}`}
+                      disabled={!state.writable}
+                      onClick={() => {
+                        setSaveError(null)
+                        setDraft((current) => current.filter((_, at) => at !== index))
+                      }}
+                    >
+                      ×
+                    </button>
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+        )}
       </div>
 
       <footer className="dma-settings__actions">
