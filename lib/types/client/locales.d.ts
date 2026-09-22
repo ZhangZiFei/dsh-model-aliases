@@ -25,10 +25,10 @@ export declare const zh: {
     readonly 'settings.model': "模型";
     readonly 'settings.effort': "推理等级";
     readonly 'settings.providerDefault': "提供商默认";
+    readonly 'settings.openOptions': "展开可选项";
     readonly 'settings.remove': "删除";
     readonly 'settings.moveUp': "上移";
     readonly 'settings.moveDown': "下移";
-    readonly 'settings.unavailable': "不可用";
     readonly 'settings.manualHint': "请填写 DSH 使用的精确路由 ID。";
 };
 export type ModelAliasesKey = keyof typeof zh;

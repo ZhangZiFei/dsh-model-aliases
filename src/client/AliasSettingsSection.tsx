@@ -8,6 +8,8 @@ import type {
   ModelProviderGroup,
   SessionId,
 } from '@deepseek-ai/dsh-api-remotes/client'
+import type { SessionListState } from '@deepseek-ai/dsh-api-session-controller/client'
+import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import type { ModelDirectoryState } from '@deepseek-ai/dsh-client-ui-model-selection/client'
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
 import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
@@ -32,6 +34,7 @@ import { NS } from './locales.js'
 
 export interface AliasSettingsSectionInjected {
   aliases: SettingsScope<ModelAliasSettings>
+  sessionList: ObservableSnapshot<SessionListState>
   loadCatalog: (sessionId: SessionId) => Promise<ModelDirectoryState>
 }
 
@@ -50,21 +53,27 @@ interface SelectOption {
   label: string
 }
 
-function SettingsSelect({
+function SettingsCombobox({
   value,
   options,
   disabled = false,
   ariaLabel,
-  onChange,
+  openOptionsLabel,
+  placeholder,
+  onInput,
+  onSelect,
 }: {
   value: string
   options: readonly SelectOption[]
   disabled?: boolean
   ariaLabel: string
-  onChange: (value: string) => void
+  openOptionsLabel: string
+  placeholder?: string
+  onInput: (value: string) => void
+  onSelect: (value: string) => void
 }) {
   const [open, setOpen] = useState(false)
-  const selected = options.find((option) => option.value === value)
+  const selected = options.some((option) => option.value === value)
 
   useEffect(() => {
     if (disabled) setOpen(false)
@@ -72,7 +81,7 @@ function SettingsSelect({
 
   return (
     <Menu
-      className="dma-select"
+      className="dma-combobox"
       open={open}
       portal
       align="start"
@@ -80,25 +89,43 @@ function SettingsSelect({
         id: option.value,
         label: option.label,
       }))}
-      selectedId={value}
+      selectedId={selected ? value : undefined}
       onClose={() => setOpen(false)}
       onSelect={(next) => {
         setOpen(false)
-        onChange(next)
+        onSelect(next)
       }}
       anchor={(
-        <button
-          type="button"
-          className="dma-select__trigger"
-          aria-label={ariaLabel}
-          aria-haspopup="menu"
-          aria-expanded={open}
-          disabled={disabled || options.length === 0}
-          onClick={() => setOpen((current) => !current)}
-        >
-          <span className="dma-select__value">{selected?.label ?? value}</span>
-          <IconChevronDownOutline14 className="dma-select__chevron" />
-        </button>
+        <div className="dma-combobox__control">
+          <input
+            value={value}
+            aria-label={ariaLabel}
+            aria-autocomplete="list"
+            aria-expanded={open}
+            aria-haspopup="menu"
+            disabled={disabled}
+            placeholder={placeholder}
+            role="combobox"
+            onChange={(event) => onInput(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'ArrowDown' && options.length > 0) {
+                event.preventDefault()
+                setOpen(true)
+              }
+            }}
+          />
+          <button
+            type="button"
+            className="dma-combobox__trigger"
+            aria-label={openOptionsLabel}
+            aria-haspopup="menu"
+            aria-expanded={open}
+            disabled={disabled || options.length === 0}
+            onClick={() => setOpen((current) => !current)}
+          >
+            <IconChevronDownOutline14 className="dma-combobox__chevron" />
+          </button>
+        </div>
       )}
     />
   )
@@ -127,12 +154,18 @@ function sameAliases(left: readonly ModelAlias[], right: readonly ModelAlias[]):
 }
 
 export function AliasSettingsSection(props: AliasSettingsSectionProps) {
-  const { aliases, loadCatalog, useSessions, t } = props
+  const { aliases, loadCatalog, sessionList, t } = props
   const state = useSyncExternalStore(
     (listener) => aliases.subscribe(listener),
     () => aliases.getSnapshot(),
   )
-  const currentSessionId = useSessions((sessions) => sessions.current)
+  const sessionState = useSyncExternalStore(
+    (listener) => sessionList.subscribe(listener),
+    () => sessionList.getSnapshot(),
+  )
+  // 设置面板是 root scope；重连或页面恢复的短暂窗口里 current 可能被遮蔽，
+  // 但列表中的普通会话仍能安全承载同一份模型目录查询。
+  const currentSessionId = sessionState.current ?? sessionState.ids[0]
   const [draft, setDraft] = useState<ModelAlias[]>([])
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
@@ -257,13 +290,6 @@ export function AliasSettingsSection(props: AliasSettingsSectionProps) {
         {draft.map((alias, index) => {
           const selectedGroup = catalog.groups.find((group) => group.id === alias.provider)
           const selectedModel = modelFor(catalog.groups, alias.provider, alias.model)
-          const providerKnown = selectedGroup !== undefined
-          const modelKnown = selectedModel !== undefined
-          const effortKnown = alias.reasoningEffort === undefined || (
-            selectedModel?.reasoning?.defaultEffort === alias.reasoningEffort
-            || selectedModel?.reasoning?.efforts.some((effort) => effort.id === alias.reasoningEffort)
-          )
-
           return (
             <article className="dma-alias-card" key={index}>
               <label className="dma-field">
@@ -276,88 +302,71 @@ export function AliasSettingsSection(props: AliasSettingsSectionProps) {
 
               <div className="dma-field">
                 <span>{t('settings.provider')}</span>
-                {catalog.groups.length === 0 ? (
-                  <input
-                    value={alias.provider}
-                    aria-label={t('settings.provider')}
-                    placeholder={t('settings.manualHint')}
-                    onChange={(event) => replaceAt(index, { ...alias, provider: event.target.value })}
-                  />
-                ) : (
-                  <SettingsSelect
-                    value={alias.provider}
-                    ariaLabel={t('settings.provider')}
-                    options={[
-                      ...(!providerKnown ? [{
-                        value: alias.provider,
-                        label: `${alias.provider} · ${t('settings.unavailable')}`,
-                      }] : []),
-                      ...catalog.groups.map((group) => ({
-                        value: group.id,
-                        label: group.name,
-                      })),
-                    ]}
-                    onChange={(provider) => {
-                      const group = catalog.groups.find((entry) => entry.id === provider)
-                      replaceAt(index, {
-                        name: alias.name,
-                        provider,
-                        model: group?.models[0]?.id ?? '',
-                      })
-                    }}
-                  />
-                )}
+                <SettingsCombobox
+                  value={alias.provider}
+                  ariaLabel={t('settings.provider')}
+                  openOptionsLabel={t('settings.openOptions')}
+                  placeholder={t('settings.manualHint')}
+                  options={catalog.groups.map((group) => ({
+                    value: group.id,
+                    label: group.name,
+                  }))}
+                  onInput={(provider) => replaceAt(index, { ...alias, provider })}
+                  onSelect={(provider) => {
+                    const group = catalog.groups.find((entry) => entry.id === provider)
+                    replaceAt(index, {
+                      name: alias.name,
+                      provider,
+                      model: group?.models[0]?.id ?? '',
+                    })
+                  }}
+                />
               </div>
 
               <div className="dma-field">
                 <span>{t('settings.model')}</span>
-                {selectedGroup === undefined ? (
-                  <input
-                    value={alias.model}
-                    aria-label={t('settings.model')}
-                    placeholder={t('settings.manualHint')}
-                    onChange={(event) => replaceAt(index, { ...alias, model: event.target.value })}
-                  />
-                ) : (
-                  <SettingsSelect
-                    value={alias.model}
-                    ariaLabel={t('settings.model')}
-                    options={[
-                      ...(!modelKnown ? [{
-                        value: alias.model,
-                        label: `${alias.model} · ${t('settings.unavailable')}`,
-                      }] : []),
-                      ...selectedGroup.models.map((model) => ({
-                        value: model.id,
-                        label: model.name,
-                      })),
-                    ]}
-                    onChange={(model) => replaceAt(index, {
-                      name: alias.name,
-                      provider: alias.provider,
-                      model,
-                    })}
-                  />
-                )}
+                <SettingsCombobox
+                  value={alias.model}
+                  ariaLabel={t('settings.model')}
+                  openOptionsLabel={t('settings.openOptions')}
+                  placeholder={t('settings.manualHint')}
+                  options={selectedGroup?.models.map((model) => ({
+                    value: model.id,
+                    label: model.name,
+                  })) ?? []}
+                  onInput={(model) => replaceAt(index, { ...alias, model })}
+                  onSelect={(model) => replaceAt(index, {
+                    name: alias.name,
+                    provider: alias.provider,
+                    model,
+                  })}
+                />
               </div>
 
               <div className="dma-field">
                 <span>{t('settings.effort')}</span>
-                <SettingsSelect
+                <SettingsCombobox
                   value={alias.reasoningEffort ?? ''}
                   ariaLabel={t('settings.effort')}
+                  openOptionsLabel={t('settings.openOptions')}
+                  placeholder={t('settings.providerDefault')}
                   options={[
                     { value: '', label: t('settings.providerDefault') },
-                    ...(!effortKnown && alias.reasoningEffort !== undefined ? [{
-                      value: alias.reasoningEffort,
-                      label: `${alias.reasoningEffort} · ${t('settings.unavailable')}`,
-                    }] : []),
                     ...(selectedModel?.reasoning?.efforts.map((effort) => ({
                       value: effort.id,
                       label: effort.name,
                     })) ?? []),
                   ]}
-                  onChange={(value) => {
+                  onInput={(value) => {
+                    const next: ModelAlias = {
+                      name: alias.name,
+                      provider: alias.provider,
+                      model: alias.model,
+                    }
+                    if (value.length > 0) next.reasoningEffort = value
+                    replaceAt(index, next)
+                  }}
+                  onSelect={(value) => {
                     const next: ModelAlias = {
                       name: alias.name,
                       provider: alias.provider,

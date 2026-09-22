@@ -1,5 +1,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { SessionId } from '@deepseek-ai/dsh-api-remotes/client'
+import type { SessionListState } from '@deepseek-ai/dsh-api-session-controller/client'
+import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { ModelDirectoryState } from '@deepseek-ai/dsh-client-ui-model-selection/client'
@@ -34,6 +36,7 @@ export const inject = [
   'settingsScope',
   'connection',
   'remote',
+  'remote.session',
   'sessions',
   'modelDirectories',
 ]
@@ -44,6 +47,7 @@ export const inject = [
  * skipLibCheck 下客户端声明会被静默丢弃，因此按需声明结构化切片。
  */
 interface ClientSessionsFace {
+  readonly list: ObservableSnapshot<SessionListState>
   subagentAddress(id: SessionId): unknown
 }
 
@@ -125,6 +129,7 @@ export function apply(ctx: Context): void {
     locale: NS,
     inject: () => ({
       aliases: aliasSettings,
+      sessionList: sessions.list,
       loadCatalog,
     }),
   }, AliasSettingsSection))

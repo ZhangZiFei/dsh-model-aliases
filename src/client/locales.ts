@@ -26,10 +26,10 @@ export const zh = {
   'settings.model': '模型',
   'settings.effort': '推理等级',
   'settings.providerDefault': '提供商默认',
+  'settings.openOptions': '展开可选项',
   'settings.remove': '删除',
   'settings.moveUp': '上移',
   'settings.moveDown': '下移',
-  'settings.unavailable': '不可用',
   'settings.manualHint': '请填写 DSH 使用的精确路由 ID。',
 } as const
 
@@ -61,9 +61,9 @@ export const en: Record<ModelAliasesKey, string> = {
   'settings.model': 'Model',
   'settings.effort': 'Reasoning effort',
   'settings.providerDefault': 'Provider default',
+  'settings.openOptions': 'Show available options',
   'settings.remove': 'Remove',
   'settings.moveUp': 'Move up',
   'settings.moveDown': 'Move down',
-  'settings.unavailable': 'Unavailable',
   'settings.manualHint': 'Enter the exact route IDs used by DSH.',
 }
