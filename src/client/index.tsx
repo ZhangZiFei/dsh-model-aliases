@@ -7,10 +7,12 @@ import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { ModelDirectoryState } from '@deepseek-ai/dsh-client-ui-model-selection/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
-import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
+import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
 import {
   decodeModelAliasSettings,
   DEFAULT_MODEL_ALIASES,
+  MODEL_ALIASES_ENTRY_ID,
+  type ModelAlias,
   type ModelAliasSettings,
 } from '../domain.js'
 import { AliasSelector } from './AliasSelector.js'
@@ -33,10 +35,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 export const inject = [
   'slots',
   'locale',
-  'settingsScope',
-  'connection',
-  'remote',
-  'remote.session',
+  'configForms',
   'sessions',
   'modelDirectories',
 ]
@@ -45,10 +44,67 @@ export const inject = [
  * `ctx.sessions` 的客户端切片。Host 的 @deepseek-ai/dsh-session 也向 cordis
  * Context 合并了同名的 `sessions`（host 版 SessionStore），两份声明类型不同，
  * skipLibCheck 下客户端声明会被静默丢弃，因此按需声明结构化切片。
+ *
+ * `scope`/`binding` 是 `ModelDirectoryResolver.directoryFor()` 的前置条件：
+ * 只有挂着已保留 Agent 作用域的会话才能解析出模型目录。
  */
 interface ClientSessionsFace {
   readonly list: ObservableSnapshot<SessionListState>
   subagentAddress(id: SessionId): unknown
+  scope(id: SessionId): unknown
+  binding(id: SessionId): unknown
+}
+
+/** 别名设置的读取面：DSH 共享配置表单的别名快照。 */
+export interface AliasSettingsInjected {
+  getAliases: () => readonly ModelAlias[]
+  subscribe: (listener: () => void) => () => void
+}
+
+/** 设置页面多一个写入口：一次 revision 围栏内的原子别名写入。 */
+export interface AliasSettingsEditorInjected extends AliasSettingsInjected {
+  /** 当前 Host 同步状态；`loading` 表示首个已接受值尚未到达。 */
+  status: () => 'loading' | 'ready' | 'unavailable'
+  /** Host 文档是否接受写入。 */
+  writable: () => boolean
+  save: (aliases: readonly ModelAlias[]) => Promise<boolean>
+}
+
+/**
+ * 复用 ui-settings 共享的配置表单：revision 围栏、串行写入、冲突恢复、
+ * 重连与 `settings/document-updated` 观察全部由它处理。
+ *
+ * 快照对象在下一次变更前保持引用稳定，因此按快照缓存解码结果，
+ * 让 `useSyncExternalStore` 的 getSnapshot 返回稳定引用。
+ */
+function createAliasSettings(form: ConfigForm<ModelAliasSettings>): AliasSettingsInjected & {
+  status: AliasSettingsEditorInjected['status']
+  writable: AliasSettingsEditorInjected['writable']
+  save: AliasSettingsEditorInjected['save']
+} {
+  let cachedSnapshot: unknown
+  let cachedAliases: readonly ModelAlias[] = DEFAULT_MODEL_ALIASES
+
+  const getAliases = (): readonly ModelAlias[] => {
+    const snapshot = form.getSnapshot()
+    if (snapshot !== cachedSnapshot) {
+      cachedSnapshot = snapshot
+      // 条目从未写入时由 Config schema 的 default 兜底；这里只处理被显式清空的空数组。
+      const decoded = decodeModelAliasSettings(snapshot.value)?.aliases
+      cachedAliases = decoded === undefined || decoded.length === 0
+        ? DEFAULT_MODEL_ALIASES
+        : decoded
+    }
+    return cachedAliases
+  }
+
+  return {
+    getAliases,
+    subscribe: (listener) => form.subscribe(listener),
+    status: () => form.getSnapshot().status,
+    writable: () => form.getSnapshot().writable,
+    save: (aliases) => form.mutate([{ op: 'set', path: ['aliases'], value: [...aliases] }]),
+  }
 }
 
 export function apply(ctx: Context): void {
@@ -66,34 +122,23 @@ export function apply(ctx: Context): void {
     return () => tag.remove()
   }, 'model-aliases: styles')
 
-  // 复用 settings UI 提供的高层 scope：revision、串行写入、重连及外部更新均由它处理。
-  const aliasSettings = ctx.settingsScope.bind<ModelAliasSettings>({
-    namespace: 'model-aliases',
-    decode: decodeModelAliasSettings,
-  })
+  const form = ctx.configForms.get<ModelAliasSettings>(MODEL_ALIASES_ENTRY_ID)
+  const aliases = createAliasSettings(form)
 
-  // 「从未设置」由 Host schema default 兜底；这里负责用户显式清空后自动恢复默认。
-  // revision 不变不重复尝试，Host 拒绝写入时 recovery read 会保持原 revision，避免重试死循环。
-  ctx.effect(() => {
-    let evaluatedRevision: number | undefined
-    const restoreDefaultsIfEmpty = () => {
-      const snapshot = aliasSettings.getSnapshot()
-      if (snapshot.status !== 'ready' || !snapshot.writable) return
-      if (snapshot.revision === evaluatedRevision) return
-      evaluatedRevision = snapshot.revision
-      const empty = snapshot.value === undefined || snapshot.value.aliases.length === 0
-      if (!empty) return
-      void aliasSettings.set('aliases', [...DEFAULT_MODEL_ALIASES]).catch(() => undefined)
+  /**
+   * 设置面板挂在 root scope，没有会话作用域可继承，只能借用会话列表里
+   * 「已挂载 Agent 作用域」的会话读取共享模型目录：`directoryFor()` 对没有
+   * 保留作用域的会话会直接抛错（`resolved no scope`），因此逐个尝试，
+   * 第一个能解析出目录的即为可用来源；全部不可用才报错。
+   */
+  const loadCatalog = async (): Promise<ModelDirectoryState> => {
+    for (const sessionId of sessions.list.getSnapshot().ids) {
+      if (sessions.subagentAddress(sessionId) !== undefined) continue
+      if (sessions.scope(sessionId) === undefined) continue
+      if (sessions.binding(sessionId) === undefined) continue
+      return ctx.modelDirectories.directoryFor(sessionId).load()
     }
-    restoreDefaultsIfEmpty()
-    return aliasSettings.subscribe(restoreDefaultsIfEmpty)
-  }, 'model-aliases: restore defaults after clearing')
-
-  const loadCatalog = async (sessionId: SessionId): Promise<ModelDirectoryState> => {
-    if (sessions.subagentAddress(sessionId) !== undefined) {
-      throw new Error('被寻址的子代理会话不支持模型选择')
-    }
-    return ctx.modelDirectories.directoryFor(sessionId).load()
+    throw new Error('没有已挂载的会话可读取模型目录')
   }
 
   // 别名选择器是输入框工具行里的独立控件：原生「模型 / 推理等级」座位保持可见，
@@ -109,7 +154,8 @@ export function apply(ctx: Context): void {
       const available = sessions.subagentAddress(sessionId) === undefined
       return {
         available,
-        aliases: aliasSettings,
+        getAliases: aliases.getAliases,
+        subscribe: aliases.subscribe,
         directory: directory.store,
         loadDirectory: () => {
           if (available) void directory.load().catch(() => undefined)
@@ -128,8 +174,11 @@ export function apply(ctx: Context): void {
     label: () => ctx.locale.bind(NS)('nav'),
     locale: NS,
     inject: () => ({
-      aliases: aliasSettings,
-      sessionList: sessions.list,
+      getAliases: aliases.getAliases,
+      subscribe: aliases.subscribe,
+      status: aliases.status,
+      writable: aliases.writable,
+      save: aliases.save,
       loadCatalog,
     }),
   }, AliasSettingsSection))

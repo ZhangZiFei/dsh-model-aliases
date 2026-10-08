@@ -4,14 +4,14 @@
 
 ## 项目目标
 
-本项目是 DeepSeek Harness Web 的安装式 Host + Client Cordis 插件：
+本项目是 DeepSeek Harness 的安装式 Host + Client Cordis 插件：
 
-- Host 注册并拥有持久化的 `model-aliases` 设置命名空间；
+- Host 通过 profile 条目 `model-aliases` 的 `Config` schema 拥有持久化别名配置；
 - Client 在设置面板提供别名编辑页面；
 - Client 在输入框工具行提供别名选择器，与原生“模型 / 推理等级”控件并存；
 - 所有模型选择必须继续经过 DSH 原生 `ModelDirectory.select()` 链路。
 
-当前兼容目标为 DeepSeek Harness `0.1.2-rc.1`。
+当前兼容目标为 DeepSeek Harness `0.2.0-rc.2`。
 
 ## 语言与实现原则
 
@@ -25,26 +25,29 @@
 
 ### Host
 
-- 设置 namespace 固定为 `model-aliases`。
-- 使用字符串 namespace 和 Schemastery schema 注册（`settingsNamespace()` 已在 0.1.2 移除）。
-- `settings` 是硬依赖；不要增加进程内配置回退。
-- 跨字段约束放在 `validateModelAliasSettings()` 中。
+- 设置面就是 profile 条目的 Config：导出 `Config` schema，条目 id 固定为 `model-aliases`（`MODEL_ALIASES_ENTRY_ID`）。
+- `aliases` 字段必须 `.volatile()`，否则 `SettingsForms` 不把它当实时字段，配置表单看不到它。
+- `apply` 只做两件事：用 `ctx.settings.configure({ auto: false })` 关闭自动生成页面，并在载入器稳定后补做一次旧 `settings.yaml.imported` 迁移。
+- 迁移只在条目从未被写入（`describe().user === undefined`）时执行一次；失败只记日志，不改写原文件。
+- 跨字段约束（唯一名称、唯一完整选择、首尾空白）放在 `validateModelAliasSettings()` 中：0.2 的设置服务没有写入期校验钩子，客户端提交前校验，Host 侧只在迁移时校验。
 - `reasoningEffort` 缺省表示保留适配器或提供商默认行为，不得自动写入虚构默认值。
-- `@deepseek-ai/schemastery` 是运行时 dependency；Cordis 和 DSH 服务包保持 peer dependency。
+- `@deepseek-ai/schemastery` 和 `yaml` 是运行时 dependency；Cordis 和 DSH 服务包保持 peer dependency。
 
 ### Client 设置
 
-- 持久化读写必须复用 `ctx.settingsScope`。
+- 持久化读写必须复用 `ctx.configForms.get(MODEL_ALIASES_ENTRY_ID)`。
 - 不重新实现低层 `settings.describe/update/replace/mutate` 控制器。
-- 由 `settingsScope` 负责 revision、串行写入、冲突恢复、重连和 `settings/document-updated`。
-- wire 数据必须先通过 `decodeModelAliasSettings()` 收窄。
-- 远端或只读设置环境必须禁用写操作，不得伪装保存成功。
+- 由共享配置表单负责 revision 围栏、串行写入、冲突恢复、重连和 `settings/document-updated`。
+- wire 数据必须先通过 `decodeModelAliasSettings()` 收窄；`getAliases()` 必须按快照缓存结果，保证 `useSyncExternalStore` 的引用稳定性。
+- 别名写入使用一次 `mutate([{ op: 'set', path: ['aliases'], value }])`，不逐字段写。
+- 远端或只读设置环境必须禁用写操作，不得伪装保存成功（`writable()` 为假时禁用全部编辑控件）。
 
 ### Client 模型选择
 
 - 必须复用 `ctx.modelDirectories.directoryFor(sessionId)`。
 - 不直接另起 `sessions.models()` 或 `sessions.selectModel()` 状态链路。
 - 别名选择器注册到 `conversation.input.right`（list 插槽），不得遮蔽 `conversation.input.model` 原生座位；保留原 `ui-model-selection` 插件以提供 `modelDirectories` 和原生座位。
+- 该插槽在 0.2 没有 owner 共享，注册时用 `inject` 工厂提供业务面，`loadCatalog` 等只依赖 `sessionId` 的能力由 apply 闭包持有。
 - 别名只是完整选择的快捷方式：选择别名通过同一个 `ModelDirectory.select()` 改写原生座位内容，原生座位上的手动选择也直接决定别名选择器的显示。
 - 当前别名始终由完整选择 `{ provider, model, reasoningEffort? }` 推导，不保存独立的 `selectedAliasId`。
 - 工具行插槽没有 owner 的 `locked` 共享，组件必须用 `useSession()` 的会话事实（`removed`）自行关闭交互。
@@ -54,18 +57,20 @@
 
 ## 设置数据约束
 
-持久化格式：
+持久化位置：profile patch 中 `model-aliases` 条目的 `config.aliases`。
 
 ```yaml
-model-aliases:
-  aliases:
-    - name: 日常
-      provider: deepseek
-      model: deepseek-chat
-    - name: 深度推理
-      provider: openai
-      model: o3
-      reasoningEffort: high
+- id: model-aliases
+  name: dsh-model-aliases
+  config:
+    aliases:
+      - name: 日常
+        provider: deepseek
+        model: deepseek-chat
+      - name: 深度推理
+        provider: openai
+        model: o3
+        reasoningEffort: high
 ```
 
 约束：
@@ -73,7 +78,8 @@ model-aliases:
 - 名称、provider、model 以及存在的 reasoningEffort 必须是首尾无空白的非空字符串；
 - 别名名称唯一；
 - 完整模型选择唯一，避免当前选择映射到多个别名；
-- 保存前标准化表单值，空 reasoning effort 必须删除字段而不是保存空字符串。
+- 保存前标准化表单值，空 reasoning effort 必须删除字段而不是保存空字符串；
+- `aliases` 为空数组时界面按 `DEFAULT_MODEL_ALIASES` 显示，但不得为了“修复”而自动写回。
 
 ## Cordis 生命周期
 
@@ -84,9 +90,9 @@ model-aliases:
 
 ## 文件职责
 
-- `src/index.ts`：Host 设置 namespace 和 schema 注册。
-- `src/domain.ts`：Host/Client 共享的纯领域规则与 wire decoder。
-- `src/client/index.tsx`：Client Cordis 注册、Slot 注入和服务装配。
+- `src/index.ts`：Host 条目 `Config` schema、页面策略与旧设置迁移。
+- `src/domain.ts`：Host/Client 共享的纯领域规则、条目 id 与 wire decoder。
+- `src/client/index.tsx`：Client Cordis 注册、Slot 注入和配置表单装配。
 - `src/client/AliasSelector.tsx`：composer 别名选择器。
 - `src/client/AliasSettingsSection.tsx`：设置页面和编辑状态。
 - `src/client/locales.ts`：中英文词典。
@@ -110,12 +116,12 @@ pnpm pack --dry-run
 - Host 和 Client bundle 构建无警告；
 - 全部测试通过；
 - 发布清单不包含已删除源码对应的陈旧声明；
-- `lib/client.js` 不得产生 DSH ModuleLoader 无法提供的运行时 `require()`。
+- `lib/client.js` 只 `require()` DSH ModuleLoader 提供的共享模块（当前为 `react`、`react/jsx-runtime`、`@deepseek-ai/dsh-client-ui-primitives`）。
 
 ## 安装与 DSH 文件边界
 
-- 开发安装使用 `dsh plugin --profile web add link:.`。
-- 插件行写入用户 Web Profile：`$DSH_HOME/profiles/web/cordis.patch.yml`。
-- 不修改全局 npm 安装目录中的 `@deepseek-ai/dsh-web-app/cordis.patch.yml`。
+- 开发安装使用 `dsh plugin --profile <profile> add link:.`；本机桌面 Profile 为 `desktop`。
+- 插件行写入用户 Profile：`$DSH_HOME/profiles/<profile>/cordis.patch.yml`。
+- 不修改 DSH 安装目录（`app.asar` / `app.asar.unpacked`）内的任何文件。
 - 不修改或删除 DSH 随发行版提供的 agent preset。
-- 组合变更或普通 Client 构建后，需要重启当前提供 `http://127.0.0.1:3080` 的 DSH Web 进程并刷新页面；不要启动第二个服务器冒充现有 GUI。
+- CLI 安装只写文件，不会热加载：必须重启提供 `DSH_WEB_URL` 的 DSH 进程并刷新页面；不要启动第二个服务器冒充现有 GUI。

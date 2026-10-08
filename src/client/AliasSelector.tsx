@@ -6,15 +6,13 @@ import {
 } from 'react'
 import type { ModelSelection } from '@deepseek-ai/dsh-api-remotes/client'
 import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
-import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { ModelDirectoryState } from '@deepseek-ai/dsh-client-ui-model-selection/client'
 import {
-  IconChevronDownOutline14,
+  IconChevronDownOutlineRegular,
   Menu,
   type MenuEntry,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type {
-  InjectFace,
   PropsLocale,
   PropsRuntime,
 } from '@deepseek-ai/dsh-client-ui-slots'
@@ -22,21 +20,21 @@ import {
   aliasAvailability,
   aliasForSelection,
   type ModelAlias,
-  type ModelAliasSettings,
 } from '../domain.js'
+import type { AliasSettingsInjected } from './index.js'
 import { NS } from './locales.js'
 
-export interface AliasSelectorInjected {
+/** 选择器由 apply 闭包注入业务面：插槽只提供会话与语言座位。 */
+export interface AliasSelectorInjected extends AliasSettingsInjected {
   available: boolean
-  aliases: SettingsScope<ModelAliasSettings>
   directory: SnapshotStore<ModelDirectoryState>
   loadDirectory: () => void
   select: (selection: ModelSelection) => Promise<boolean>
 }
 
 type AliasSelectorProps = PropsRuntime<'conversation.input.right'>
-  & InjectFace<AliasSelectorInjected>
   & PropsLocale<typeof NS>
+  & AliasSelectorInjected
 
 function routeLabel(alias: ModelAlias): string {
   return `${alias.provider} / ${alias.model}${alias.reasoningEffort === undefined ? '' : ` / ${alias.reasoningEffort}`}`
@@ -50,7 +48,8 @@ function routeLabel(alias: ModelAlias): string {
 export function AliasSelector(props: AliasSelectorProps) {
   const {
     available,
-    aliases,
+    getAliases,
+    subscribe,
     directory,
     loadDirectory,
     select,
@@ -60,17 +59,13 @@ export function AliasSelector(props: AliasSelectorProps) {
   // 原生座位由 composer 通过 owner 的 locked 关闭；工具行插槽没有该 owner 共享，
   // 这里用会话生命周期中同一个 removed 事实禁用，避免会话已删除后仍能切换。
   const locked = useSession((snapshot) => snapshot.removed)
-  const aliasState = useSyncExternalStore(
-    (listener) => aliases.subscribe(listener),
-    () => aliases.getSnapshot(),
-  )
+  const configuredAliases = useSyncExternalStore(subscribe, getAliases)
   const directoryState = useSyncExternalStore(
     (listener) => directory.subscribe(listener),
     () => directory.getSnapshot(),
   )
   const [open, setOpen] = useState(false)
   const [selectError, setSelectError] = useState<string | null>(null)
-  const configuredAliases = aliasState.value?.aliases ?? []
 
   const currentAlias = useMemo(
     () => aliasForSelection(configuredAliases, directoryState.current, directoryState.groups),
@@ -106,8 +101,7 @@ export function AliasSelector(props: AliasSelectorProps) {
     loadDirectory()
   }
 
-  const loading = aliasState.status === 'loading'
-    || directoryState.status === 'idle'
+  const loading = directoryState.status === 'idle'
     || directoryState.status === 'loading'
   const error = selectError ?? directoryState.error
   const selectedIndex = currentAlias === undefined
@@ -176,7 +170,7 @@ export function AliasSelector(props: AliasSelectorProps) {
           onClick={openMenu}
         >
           <span className="dma-selector__label">{currentAlias?.name ?? t('selector.custom')}</span>
-          <IconChevronDownOutline14 className="dma-selector__chevron" />
+          <IconChevronDownOutlineRegular className="dma-selector__chevron" />
         </button>
       )}
     />

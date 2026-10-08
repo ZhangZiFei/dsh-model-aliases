@@ -13,12 +13,12 @@
 ## 安装
 
 ```sh
-dsh plugin --profile web add github:ZhangZiFei/dsh-model-aliases
+dsh plugin --profile desktop add github:ZhangZiFei/dsh-model-aliases
 ```
 
-重启当前 `dsh web` 进程并刷新页面，然后打开 **设置 → 模型别名**。
+重启当前 DSH 进程并刷新页面，然后打开 **设置 → 模型别名**。
 
-**当前兼容目标为 DeepSeek Harness Web 0.1.2-rc.1。** 插件已经声明 DSH Bundle，安装命令会自动把对应 Patch 加入 Web Profile，无需手工编辑 `cordis.patch.yml`。
+**当前兼容目标为 DeepSeek Harness 0.2.0-rc.2。** 插件已经声明 DSH Bundle，安装命令会自动把对应 Patch 加入 Profile，无需手工编辑 `cordis.patch.yml`。
 
 ## 你会得到
 
@@ -26,7 +26,7 @@ dsh plugin --profile web add github:ZhangZiFei/dsh-model-aliases
 - **与原生选择器并存**——别名选择器位于输入框工具行，原生“模型 / 推理等级”控件保持可见
 - **双向同步**——选择别名会改写原生控件的内容；在原生控件里手动选择模型或推理等级，别名选择器也会同步显示对应别名或“自定义”
 - **原生模型选择链路**——所有选择仍交给 DSH `ModelDirectory.select()` 校验和应用
-- **持久化设置**——配置写入 DSH 的 `model-aliases` 设置命名空间，重启后继续生效
+- **持久化配置**——别名保存在 profile patch 的 `model-aliases` 条目里，重启后继续生效
 - **目录感知且支持自定义**——可从当前会话目录下拉选择提供商、模型和推理等级，也可在同一字段直接输入自定义 ID
 - **安全保留失效配置**——目录中暂时不存在的别名不会丢失，但会禁用并说明原因
 - **准确显示当前状态**——完整选择匹配别名时显示别名，否则显示“自定义”
@@ -41,23 +41,27 @@ dsh plugin --profile web add github:ZhangZiFei/dsh-model-aliases
 
 推理等级选择“提供商默认”时，插件不会写入虚构的默认值，而是保留适配器或提供商的原始行为。
 
-首次使用会写入预置别名；如果保存空列表，插件也会自动恢复预置值。预置路由不在当前模型目录时会保留，但不能被选择。
+保存空列表时，界面按预置别名显示；预置或自定义的路由不在当前模型目录时会保留，但不能被选择。
 
 ## 设置格式
 
-配置保存在 DSH 设置文档的 `model-aliases` 分节：
+别名是 profile patch 中 `model-aliases` 条目的配置（也可在 **设置 → 插件** 里查看）：
 
 ```yaml
-model-aliases:
-  aliases:
-    - name: 日常
-      provider: deepseek
-      model: deepseek-chat
-    - name: 深度推理
-      provider: openai
-      model: o3
-      reasoningEffort: high
+- id: model-aliases
+  name: dsh-model-aliases
+  config:
+    aliases:
+      - name: 日常
+        provider: deepseek
+        model: deepseek-chat
+      - name: 深度推理
+        provider: openai
+        model: o3
+        reasoningEffort: high
 ```
+
+从 0.1 升级时，旧 `settings.yaml` 里的 `model-aliases.aliases` 段会在插件首次启动时自动迁移到该条目一次。
 
 规则：
 
@@ -69,10 +73,10 @@ model-aliases:
 ## 卸载
 
 ```sh
-dsh plugin --profile web remove dsh-model-aliases
+dsh plugin --profile desktop remove dsh-model-aliases
 ```
 
-完成后重启当前 `dsh web` 进程并刷新页面。
+完成后重启当前 DSH 进程并刷新页面。
 
 ## 开发
 
@@ -85,8 +89,8 @@ pnpm pack --dry-run
 
 构建产物位于 `lib/`：
 
-- `lib/index.js`：Host 插件入口
-- `lib/client.js`：Web Client Bundle
+- `lib/index.js`：Host 插件入口（`Config` schema + 页面策略 + 旧设置迁移）
+- `lib/client.js`：Web Client Bundle（选择器与设置页）
 - `lib/types/`：TypeScript 声明
 
 ## 反馈

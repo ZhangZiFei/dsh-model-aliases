@@ -1,6 +1,7 @@
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
   useSyncExternalStore,
 } from 'react'
@@ -9,17 +10,14 @@ import type {
   SessionId,
 } from '@deepseek-ai/dsh-api-remotes/client'
 import type { SessionListState } from '@deepseek-ai/dsh-api-session-controller/client'
-import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import type { ModelDirectoryState } from '@deepseek-ai/dsh-client-ui-model-selection/client'
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
-import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
 import {
   Button,
-  IconChevronDownOutline14,
+  IconChevronDownOutlineRegular,
   Menu,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type {
-  InjectFace,
   PropsLocale,
   PropsRuntime,
 } from '@deepseek-ai/dsh-client-ui-slots'
@@ -27,19 +25,21 @@ import {
   normalizeModelAliases,
   validateModelAliasSettings,
   type ModelAlias,
-  type ModelAliasSettings,
 } from '../domain.js'
+import type { AliasSettingsEditorInjected } from './index.js'
 import { NS } from './locales.js'
 
-export interface AliasSettingsSectionInjected {
-  aliases: SettingsScope<ModelAliasSettings>
-  sessionList: ObservableSnapshot<SessionListState>
-  loadCatalog: (sessionId: SessionId) => Promise<ModelDirectoryState>
+/**
+ * 设置页由 apply 闭包注入业务面：插槽只提供全局会话座位与语言座位。
+ * `loadCatalog` 自行挑选可用的已挂载会话，页面只负责在会话集合变化时重试。
+ */
+export interface AliasSettingsSectionInjected extends AliasSettingsEditorInjected {
+  loadCatalog: () => Promise<ModelDirectoryState>
 }
 
 type AliasSettingsSectionProps = PropsRuntime<'settings.section'>
-  & InjectFace<AliasSettingsSectionInjected>
   & PropsLocale<typeof NS>
+  & AliasSettingsSectionInjected
 
 interface CatalogState {
   status: 'idle' | 'loading' | 'ready' | 'error'
@@ -122,7 +122,7 @@ function SettingsCombobox({
             disabled={disabled || options.length === 0}
             onClick={() => setOpen((current) => !current)}
           >
-            <IconChevronDownOutline14 className="dma-combobox__chevron" />
+            <IconChevronDownOutlineRegular className="dma-combobox__chevron" />
           </button>
         </div>
       )}
@@ -153,22 +153,27 @@ function sameAliases(left: readonly ModelAlias[], right: readonly ModelAlias[]):
 }
 
 export function AliasSettingsSection(props: AliasSettingsSectionProps) {
-  const { aliases, loadCatalog, sessionList, t } = props
-  const state = useSyncExternalStore(
-    (listener) => aliases.subscribe(listener),
-    () => aliases.getSnapshot(),
-  )
-  const sessionState = useSyncExternalStore(
-    (listener) => sessionList.subscribe(listener),
-    () => sessionList.getSnapshot(),
-  )
-  // 设置面板是 root scope；重连或页面恢复的短暂窗口里 current 可能被遮蔽，
-  // 但列表中的普通会话仍能安全承载同一份模型目录查询。
-  const currentSessionId = sessionState.current ?? sessionState.ids[0]
-  const [draft, setDraft] = useState<ModelAlias[]>([])
+  const {
+    getAliases,
+    subscribe,
+    status,
+    writable,
+    save: writeAliases,
+    loadCatalog,
+    t,
+    useSessions,
+  } = props
+  const acceptedAliases = useSyncExternalStore(subscribe, getAliases)
+  // 会话集合的身份键：列表每次更新都会给出新数组，用它做依赖避免重复拉取目录。
+  const sessionKey = useSessions((snapshot: SessionListState) => snapshot.ids.join(','))
+  const loadCatalogRef = useRef(loadCatalog)
+  loadCatalogRef.current = loadCatalog
+  const canWrite = writable()
+  const loading = status() === 'loading'
+  const [draft, setDraft] = useState<ModelAlias[]>(() => [...acceptedAliases])
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
-  const [savedRevision, setSavedRevision] = useState<number | undefined>()
+  const [saved, setSaved] = useState(false)
   const [catalog, setCatalog] = useState<CatalogState>({
     status: 'idle',
     groups: [],
@@ -179,18 +184,22 @@ export function AliasSettingsSection(props: AliasSettingsSectionProps) {
   const [dropIndex, setDropIndex] = useState<number | null>(null)
   const [dropAfter, setDropAfter] = useState(false)
 
+  // 已接受值变化（Host 提交、外部改写、冲突恢复）时重新播种草稿。
   useEffect(() => {
-    setDraft((state.value?.aliases ?? []).map((alias) => ({ ...alias })))
-  }, [state.revision, state.value])
+    setDraft(acceptedAliases.map((alias) => ({ ...alias })))
+    setSaved(false)
+  }, [acceptedAliases])
 
   useEffect(() => {
-    if (currentSessionId === undefined) {
-      setCatalog({ status: 'error', groups: [], error: null })
+    // 会话列表为空时保持 idle：界面只提示可手动填写，不显示目录读取失败。
+    if (sessionKey.length === 0) {
+      setCatalog({ status: 'idle', groups: [], error: null })
       return
     }
     let active = true
     setCatalog((previous) => ({ ...previous, status: 'loading', error: null }))
-    loadCatalog(currentSessionId).then(
+    // 经 ref 取用注入函数：会话集合变化是重新拉取的唯一原因，避免每次渲染都重跑。
+    loadCatalogRef.current().then(
       (models) => {
         if (active) setCatalog({ status: 'ready', groups: models.groups, error: null })
       },
@@ -201,7 +210,7 @@ export function AliasSettingsSection(props: AliasSettingsSectionProps) {
     return () => {
       active = false
     }
-  }, [currentSessionId, loadCatalog, t])
+  }, [sessionKey])
 
   const normalized = useMemo(() => normalizeModelAliases(draft), [draft])
   const validationError = useMemo(() => {
@@ -212,11 +221,11 @@ export function AliasSettingsSection(props: AliasSettingsSectionProps) {
       return messageOf(error)
     }
   }, [normalized])
-  const acceptedAliases = state.value?.aliases ?? []
   const dirty = !sameAliases(normalized, acceptedAliases)
 
   const replaceAt = (index: number, next: ModelAlias) => {
     setSaveError(null)
+    setSaved(false)
     setDraft((current) => current.map((alias, at) => at === index ? next : alias))
   }
 
@@ -224,6 +233,7 @@ export function AliasSettingsSection(props: AliasSettingsSectionProps) {
     const firstGroup = catalog.groups[0]
     const firstModel = firstGroup?.models[0]
     setSaveError(null)
+    setSaved(false)
     setDraft((current) => [
       ...current,
       {
@@ -237,6 +247,7 @@ export function AliasSettingsSection(props: AliasSettingsSectionProps) {
   const moveAlias = (from: number, to: number) => {
     if (from === to || from < 0 || to < 0 || from >= draft.length || to >= draft.length) return
     setSaveError(null)
+    setSaved(false)
     setDraft((current) => {
       const next = [...current]
       const [moved] = next.splice(from, 1)
@@ -245,16 +256,17 @@ export function AliasSettingsSection(props: AliasSettingsSectionProps) {
     })
   }
 
+  // Host 是唯一权威：写入结果由表单回读后回答，而不是在这里预测。
   const save = async () => {
     if (validationError !== null) return
     setSaving(true)
     setSaveError(null)
-    await aliases.set('aliases', normalized)
-    const snapshot = aliases.getSnapshot()
-    if (sameAliases(snapshot.value?.aliases ?? [], normalized)) {
-      setSavedRevision(snapshot.revision)
-    } else {
-      setSaveError('设置未被 Host 接受，请检查连接或重新加载后再试。')
+    try {
+      const accepted = await writeAliases(normalized)
+      if (accepted) setSaved(true)
+      else setSaveError(t('settings.saveRejected'))
+    } catch (error) {
+      setSaveError(`${t('settings.saveRejected')} ${messageOf(error)}`)
     }
     setSaving(false)
   }
@@ -301,8 +313,6 @@ export function AliasSettingsSection(props: AliasSettingsSectionProps) {
     }
   }
 
-  const loading = state.status === 'loading'
-
   return (
     <section className="dma-settings">
       <header className="dma-settings__header">
@@ -314,12 +324,15 @@ export function AliasSettingsSection(props: AliasSettingsSectionProps) {
       {catalog.status === 'loading' && (
         <div className="dma-settings__notice">{t('settings.catalogLoading')}</div>
       )}
+      {catalog.status === 'idle' && !loading && (
+        <div className="dma-settings__notice">{t('settings.catalogUnavailable')}</div>
+      )}
       {catalog.status === 'error' && (
         <div className="dma-settings__notice">
           {t('settings.catalogUnavailable')}{catalog.error === null ? '' : ` ${catalog.error}`}
         </div>
       )}
-      {!state.writable && !loading && (
+      {!canWrite && !loading && (
         <div className="dma-settings__notice">{t('settings.readOnly')}</div>
       )}
       {(saveError ?? validationError) !== null && (
@@ -362,7 +375,7 @@ export function AliasSettingsSection(props: AliasSettingsSectionProps) {
                   key={index}
                   className={rowClasses}
                   role="row"
-                  draggable={state.writable}
+                  draggable={canWrite}
                   onDragStart={handleDragStart(index)}
                   onDragOver={handleDragOver(index)}
                   onDrop={handleDrop(index)}
@@ -374,7 +387,7 @@ export function AliasSettingsSection(props: AliasSettingsSectionProps) {
                       type="button"
                       className="dma-drag-handle"
                       aria-label={`${t('settings.aliasName')} ${alias.name}`}
-                      disabled={!state.writable}
+                      disabled={!canWrite}
                       onKeyDown={handleKeyDown(index)}
                     >
                       <span className="dma-drag-handle__icon" aria-hidden="true" />
@@ -474,9 +487,10 @@ export function AliasSettingsSection(props: AliasSettingsSectionProps) {
                       type="button"
                       className="dma-remove-button"
                       aria-label={`${t('settings.remove')} ${alias.name}`}
-                      disabled={!state.writable}
+                      disabled={!canWrite}
                       onClick={() => {
                         setSaveError(null)
+                        setSaved(false)
                         setDraft((current) => current.filter((_, at) => at !== index))
                       }}
                     >
@@ -495,13 +509,13 @@ export function AliasSettingsSection(props: AliasSettingsSectionProps) {
           {t('settings.add')}
         </Button>
         <div className="dma-settings__actions-group">
-          {savedRevision === state.revision && !dirty && (
+          {saved && !dirty && (
             <span className="dma-settings__status">{t('settings.saved')}</span>
           )}
           <Button
             type="button"
             variant="primary"
-            disabled={!dirty || validationError !== null || !state.writable || saving}
+            disabled={!dirty || validationError !== null || !canWrite || saving}
             onClick={() => void save()}
           >
             {saving ? t('settings.saving') : t('settings.save')}

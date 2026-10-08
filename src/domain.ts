@@ -1,4 +1,8 @@
-export interface ModelAlias {
+/**
+ * 一个模型别名。声明为类型别名而不是 interface：TS 只为类型别名推导隐式索引签名，
+ * 因此别名设置可以直接作为 JSON wire 数据传递，不需要在边界处断言。
+ */
+export type ModelAlias = {
   name: string
   provider: string
   model: string
@@ -8,6 +12,9 @@ export interface ModelAlias {
 export interface ModelAliasSettings {
   aliases: ModelAlias[]
 }
+
+/** 插件在 profile patch 中的条目 id：Host 设置 namespace 与 Client 表单键共用它。 */
+export const MODEL_ALIASES_ENTRY_ID = 'model-aliases' as const
 
 /** 首次使用或用户清空别名后自动恢复的默认别名。 */
 export const DEFAULT_MODEL_ALIASES: readonly ModelAlias[] = [

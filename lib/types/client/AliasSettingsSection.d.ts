@@ -1,17 +1,15 @@
-import type { SessionId } from '@deepseek-ai/dsh-api-remotes/client';
-import type { SessionListState } from '@deepseek-ai/dsh-api-session-controller/client';
-import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store';
 import type { ModelDirectoryState } from '@deepseek-ai/dsh-client-ui-model-selection/client';
-import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client';
-import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots';
-import { type ModelAliasSettings } from '../domain.js';
+import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots';
+import type { AliasSettingsEditorInjected } from './index.js';
 import { NS } from './locales.js';
-export interface AliasSettingsSectionInjected {
-    aliases: SettingsScope<ModelAliasSettings>;
-    sessionList: ObservableSnapshot<SessionListState>;
-    loadCatalog: (sessionId: SessionId) => Promise<ModelDirectoryState>;
+/**
+ * 设置页由 apply 闭包注入业务面：插槽只提供全局会话座位与语言座位。
+ * `loadCatalog` 自行挑选可用的已挂载会话，页面只负责在会话集合变化时重试。
+ */
+export interface AliasSettingsSectionInjected extends AliasSettingsEditorInjected {
+    loadCatalog: () => Promise<ModelDirectoryState>;
 }
-type AliasSettingsSectionProps = PropsRuntime<'settings.section'> & InjectFace<AliasSettingsSectionInjected> & PropsLocale<typeof NS>;
+type AliasSettingsSectionProps = PropsRuntime<'settings.section'> & PropsLocale<typeof NS> & AliasSettingsSectionInjected;
 export declare function AliasSettingsSection(props: AliasSettingsSectionProps): import("react").JSX.Element;
 export {};
 //# sourceMappingURL=AliasSettingsSection.d.ts.map
